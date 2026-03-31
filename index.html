@@ -134,7 +134,7 @@ button { font-family:inherit; cursor:pointer; border:none; background:none; colo
   overflow-y:auto;
   overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
-  padding-bottom:calc(var(--tab-height) + var(--safe-bottom) + 16px);
+  padding-bottom:calc(var(--tab-height) + var(--safe-bottom) + 4px);
 }
 .tab-bar {
   position:fixed;
@@ -476,7 +476,9 @@ textarea.input { min-height:80px; resize:vertical; }
   display:flex;flex-direction:column;
   align-items:center;justify-content:center;
   padding:40px 24px;
+  padding-bottom:calc(var(--safe-bottom) + 24px);
   text-align:center;
+  overflow-y:auto;
 }
 .onboard-icon { font-size:80px; margin-bottom:24px; animation:bounce 2s infinite; }
 .onboard-title { font-size:28px; font-weight:700; margin-bottom:12px; }
@@ -933,9 +935,6 @@ function Onboarding({ onComplete }) {
     {id:'mindfulness',emoji:'🧘',text:'Be more mindful'},
     {id:'fitness',emoji:'💪',text:'Build fitness'},
     {id:'productivity',emoji:'💰',text:'Be more productive'},
-    {id:'creativity',emoji:'🎨',text:'Be more creative'},
-    {id:'sleep',emoji:'😴',text:'Sleep better'},
-    {id:'hydration',emoji:'💧',text:'Stay hydrated'}
   ];
 
   const goalToTemplates = {
