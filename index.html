@@ -1,0 +1,3298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HabitFlow">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>">
+<title>HabitFlow</title>
+<script>
+/* === window.storage polyfill using localStorage ===
+   Storage.get/set in the app do JSON.parse/stringify,
+   so the polyfill stores raw strings as-is. */
+if (!window.storage) {
+  window.storage = {
+    async get(key) {
+      const v = localStorage.getItem('hf_' + key);
+      return v !== null ? v : null;
+    },
+    async set(key, value) {
+      localStorage.setItem('hf_' + key, String(value));
+    },
+    async delete(key) {
+      localStorage.removeItem('hf_' + key);
+    },
+    async list() {
+      const keys = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('hf_')) keys.push(k.substring(3));
+      }
+      return keys;
+    }
+  };
+}
+
+</script>
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/prop-types@15/prop-types.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.24.0/babel.min.js"></script>
+<script crossorigin src="https://unpkg.com/recharts@2.5.0/umd/Recharts.js"></script>
+<style>
+/* ========== CSS RESET & VARIABLES ========== */
+:root {
+  --bg-primary: #0f172a;
+  --bg-secondary: #1e293b;
+  --bg-tertiary: #334155;
+  --bg-card: #1e293b;
+  --text-primary: #f1f5f9;
+  --text-secondary: #94a3b8;
+  --text-muted: #64748b;
+  --accent: #6366f1;
+  --accent-light: #818cf8;
+  --accent-dim: rgba(99,102,241,0.15);
+  --border: #334155;
+  --success: #22c55e;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --cat-health: #4CAF50;
+  --cat-fitness: #FF5722;
+  --cat-learning: #2196F3;
+  --cat-mindfulness: #9C27B0;
+  --cat-productivity: #FF9800;
+  --cat-social: #E91E63;
+  --cat-finance: #00BCD4;
+  --cat-creativity: #FFC107;
+  --safe-top: env(safe-area-inset-top, 20px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --tab-height: 56px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html, body, #root {
+  height:100%; width:100%;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  background:var(--bg-primary);
+  color:var(--text-primary);
+  -webkit-font-smoothing:antialiased;
+  overscroll-behavior:none;
+  overflow:hidden;
+  user-select:none;
+  -webkit-user-select:none;
+}
+input, textarea, select { font-family:inherit; font-size:16px; }
+button { font-family:inherit; cursor:pointer; border:none; background:none; color:inherit; touch-action:manipulation; }
+::-webkit-scrollbar { width:0; height:0; }
+
+/* ========== ANIMATIONS ========== */
+@keyframes fadeIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideUp { from{opacity:0;transform:translateY(100%)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideDown { from{opacity:0;transform:translateY(-20px)} to{opacity:1;transform:translateY(0)} }
+@keyframes scaleIn { from{opacity:0;transform:scale(0.8)} to{opacity:1;transform:scale(1)} }
+@keyframes bounce { 0%,100%{transform:scale(1)} 50%{transform:scale(1.2)} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+@keyframes checkmark { 0%{stroke-dashoffset:50} 100%{stroke-dashoffset:0} }
+@keyframes float { 0%{opacity:1;transform:translateY(0)} 100%{opacity:0;transform:translateY(-40px)} }
+@keyframes confetti-fall { 0%{transform:translateY(-100vh) rotate(0deg)} 100%{transform:translateY(100vh) rotate(720deg)} }
+@keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+@keyframes countUp { from{opacity:0} to{opacity:1} }
+@keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes slideInLeft { from{transform:translateX(-100%);opacity:0} to{transform:translateX(0);opacity:1} }
+@keyframes ringFill { from{stroke-dashoffset:283} to{stroke-dashoffset:var(--ring-offset)} }
+@keyframes shine { 0%{left:-100%} 100%{left:200%} }
+@keyframes toastProgress { from{width:100%} to{width:0} }
+@keyframes spin { to{transform:rotate(360deg)} }
+
+.fade-in { animation: fadeIn 0.3s ease-out; }
+.slide-up { animation: slideUp 0.3s ease-out; }
+.scale-in { animation: scaleIn 0.3s ease-out; }
+
+.skeleton {
+  background: linear-gradient(90deg, var(--bg-secondary) 25%, var(--bg-tertiary) 50%, var(--bg-secondary) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 8px;
+}
+
+/* ========== LAYOUT ========== */
+.app-container {
+  height:100%;
+  display:flex;
+  flex-direction:column;
+  max-width:480px;
+  margin:0 auto;
+  position:relative;
+  overflow:hidden;
+}
+.tab-content {
+  flex:1;
+  overflow-y:auto;
+  overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding-bottom:calc(var(--tab-height) + var(--safe-bottom) + 16px);
+}
+.tab-bar {
+  position:fixed;
+  bottom:0;
+  left:50%;
+  transform:translateX(-50%);
+  width:100%;
+  max-width:480px;
+  background:rgba(15,23,42,0.95);
+  backdrop-filter:blur(20px);
+  -webkit-backdrop-filter:blur(20px);
+  border-top:1px solid var(--border);
+  display:flex;
+  justify-content:space-around;
+  align-items:center;
+  height:calc(var(--tab-height) + var(--safe-bottom));
+  padding-bottom:var(--safe-bottom);
+  z-index:100;
+}
+.tab-btn {
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  gap:2px;
+  padding:8px 16px;
+  font-size:10px;
+  color:var(--text-muted);
+  transition:color 0.2s;
+  position:relative;
+}
+.tab-btn.active { color:var(--accent-light); }
+.tab-btn .tab-icon { font-size:22px; }
+.tab-btn .tab-dot {
+  position:absolute;
+  top:4px;
+  right:12px;
+  width:6px;height:6px;
+  background:var(--accent);
+  border-radius:50%;
+}
+
+/* ========== CARDS ========== */
+.card {
+  background:var(--bg-card);
+  border-radius:14px;
+  padding:16px;
+  margin-bottom:12px;
+  border:1px solid var(--border);
+  transition:transform 0.15s;
+}
+.card:active { transform:scale(0.97); }
+
+/* ========== BUTTONS ========== */
+.btn-primary {
+  background:var(--accent);
+  color:#fff;
+  padding:12px 24px;
+  border-radius:12px;
+  font-size:16px;
+  font-weight:600;
+  width:100%;
+  transition:all 0.2s;
+}
+.btn-primary:active { transform:scale(0.97); background:var(--accent-light); }
+.btn-secondary {
+  background:var(--bg-tertiary);
+  color:var(--text-primary);
+  padding:10px 20px;
+  border-radius:10px;
+  font-size:14px;
+  font-weight:500;
+}
+.btn-danger {
+  background:rgba(239,68,68,0.15);
+  color:var(--danger);
+  padding:10px 20px;
+  border-radius:10px;
+  font-size:14px;
+  font-weight:500;
+}
+
+/* ========== FORM ELEMENTS ========== */
+.input {
+  background:var(--bg-tertiary);
+  border:1px solid var(--border);
+  border-radius:10px;
+  padding:12px 16px;
+  color:var(--text-primary);
+  width:100%;
+  font-size:16px;
+  outline:none;
+  transition:border 0.2s;
+}
+.input:focus { border-color:var(--accent); }
+.input::placeholder { color:var(--text-muted); }
+textarea.input { min-height:80px; resize:vertical; }
+
+.chip {
+  display:inline-flex;
+  align-items:center;
+  padding:6px 14px;
+  border-radius:20px;
+  font-size:13px;
+  font-weight:500;
+  background:var(--bg-tertiary);
+  color:var(--text-secondary);
+  border:1px solid var(--border);
+  transition:all 0.2s;
+  white-space:nowrap;
+}
+.chip.active {
+  background:var(--accent-dim);
+  color:var(--accent-light);
+  border-color:var(--accent);
+}
+
+/* ========== MODAL ========== */
+.modal-overlay {
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,0.6);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  z-index:200;
+  display:flex;
+  align-items:flex-end;
+  justify-content:center;
+  animation:fadeIn 0.2s ease-out;
+}
+.modal-content {
+  background:var(--bg-primary);
+  border-radius:20px 20px 0 0;
+  width:100%;
+  max-width:480px;
+  max-height:90vh;
+  overflow-y:auto;
+  padding:20px;
+  padding-bottom:calc(20px + var(--safe-bottom));
+  animation:slideUp 0.3s ease-out;
+}
+.modal-handle {
+  width:36px;height:4px;
+  background:var(--bg-tertiary);
+  border-radius:2px;
+  margin:0 auto 16px;
+}
+
+/* ========== TOAST ========== */
+.toast-container {
+  position:fixed;
+  top:calc(var(--safe-top) + 8px);
+  left:50%;
+  transform:translateX(-50%);
+  z-index:300;
+  width:90%;
+  max-width:400px;
+}
+.toast {
+  background:var(--bg-secondary);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:12px 16px;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  animation:slideDown 0.3s ease-out;
+  box-shadow:0 8px 32px rgba(0,0,0,0.3);
+  margin-bottom:8px;
+}
+.toast-progress {
+  position:absolute;
+  bottom:0;left:0;
+  height:3px;
+  background:var(--accent);
+  border-radius:0 0 12px 12px;
+  animation:toastProgress 5s linear forwards;
+}
+
+/* ========== CONFETTI ========== */
+.confetti-piece {
+  position:fixed;
+  width:10px;height:10px;
+  z-index:400;
+  animation:confetti-fall 3s linear forwards;
+  pointer-events:none;
+}
+
+/* ========== PROGRESS RING ========== */
+.progress-ring-circle {
+  transition:stroke-dashoffset 0.8s cubic-bezier(0.4,0,0.2,1);
+  transform:rotate(-90deg);
+  transform-origin:center;
+}
+
+/* ========== HABIT CARD ========== */
+.habit-card {
+  background:var(--bg-card);
+  border-radius:14px;
+  padding:14px 16px;
+  margin-bottom:8px;
+  border:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  gap:12px;
+  transition:all 0.2s;
+  position:relative;
+  overflow:hidden;
+}
+.habit-card:active { transform:scale(0.98); }
+.habit-card.completed {
+  opacity:0.6;
+}
+.habit-card .cat-bar {
+  position:absolute;
+  left:0;top:0;bottom:0;
+  width:3px;
+  border-radius:3px 0 0 3px;
+}
+.habit-emoji {
+  font-size:28px;
+  width:40px;height:40px;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.habit-info { flex:1; min-width:0; }
+.habit-name {
+  font-size:15px;font-weight:600;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.habit-meta {
+  font-size:12px;color:var(--text-muted);
+  display:flex;align-items:center;gap:8px;
+  margin-top:2px;
+}
+.streak-badge {
+  display:inline-flex;align-items:center;gap:2px;
+  font-size:12px;color:var(--warning);font-weight:600;
+}
+.check-circle {
+  width:32px;height:32px;
+  border-radius:50%;
+  border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+  transition:all 0.3s;
+  cursor:pointer;
+}
+.check-circle.done {
+  border-color:transparent;
+  animation:bounce 0.4s ease-out;
+}
+.check-circle.done svg { animation:checkmark 0.3s ease-out forwards; }
+
+/* ========== QUANTITY BAR ========== */
+.qty-bar {
+  height:4px;
+  background:var(--bg-tertiary);
+  border-radius:2px;
+  margin-top:6px;
+  overflow:hidden;
+}
+.qty-bar-fill {
+  height:100%;
+  border-radius:2px;
+  transition:width 0.4s ease-out;
+}
+
+/* ========== HEATMAP ========== */
+.heatmap-grid {
+  display:flex;
+  gap:2px;
+  overflow-x:auto;
+  padding:8px 0;
+}
+.heatmap-col { display:flex; flex-direction:column; gap:2px; }
+.heatmap-cell {
+  width:12px;height:12px;
+  border-radius:2px;
+  transition:transform 0.15s;
+  cursor:pointer;
+}
+.heatmap-cell:hover { transform:scale(1.5); }
+
+/* ========== FAB ========== */
+.fab {
+  position:fixed;
+  bottom:calc(var(--tab-height) + var(--safe-bottom) + 16px);
+  right:calc(50% - 220px);
+  width:52px;height:52px;
+  border-radius:50%;
+  background:var(--accent);
+  color:#fff;
+  display:flex;align-items:center;justify-content:center;
+  font-size:28px;
+  box-shadow:0 4px 16px rgba(99,102,241,0.4);
+  z-index:50;
+  transition:all 0.2s;
+}
+.fab:active { transform:scale(0.9); }
+
+/* ========== SECTION HEADERS ========== */
+.section-header {
+  font-size:13px;
+  font-weight:600;
+  color:var(--text-muted);
+  text-transform:uppercase;
+  letter-spacing:0.5px;
+  padding:16px 0 8px;
+}
+
+/* ========== STATS ========== */
+.stat-card {
+  background:var(--bg-card);
+  border-radius:12px;
+  padding:14px;
+  min-width:140px;
+  border:1px solid var(--border);
+}
+.stat-value {
+  font-size:24px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.stat-label {
+  font-size:12px;color:var(--text-muted);margin-top:2px;
+}
+
+/* ========== SCROLLBAR HIDE ========== */
+.scroll-h {
+  display:flex;gap:10px;
+  overflow-x:auto;
+  padding-bottom:4px;
+  scroll-snap-type:x mandatory;
+}
+.scroll-h > * { scroll-snap-align:start; flex-shrink:0; }
+
+/* ========== ONBOARDING ========== */
+.onboard-screen {
+  height:100%;
+  display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  padding:40px 24px;
+  text-align:center;
+}
+.onboard-icon { font-size:80px; margin-bottom:24px; animation:bounce 2s infinite; }
+.onboard-title { font-size:28px; font-weight:700; margin-bottom:12px; }
+.onboard-subtitle { font-size:16px; color:var(--text-secondary); margin-bottom:32px; line-height:1.5; }
+.goal-card {
+  display:flex;align-items:center;gap:12px;
+  padding:14px 18px;
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:14px;
+  cursor:pointer;
+  transition:all 0.2s;
+  text-align:left;
+}
+.goal-card.selected { border-color:var(--accent); background:var(--accent-dim); }
+.goal-card .goal-emoji { font-size:28px; }
+.goal-card .goal-text { font-size:15px; font-weight:500; }
+
+/* ========== EMOJI PICKER ========== */
+.emoji-grid {
+  display:grid;
+  grid-template-columns:repeat(8,1fr);
+  gap:4px;
+  max-height:200px;
+  overflow-y:auto;
+}
+.emoji-btn {
+  font-size:24px;
+  padding:6px;
+  border-radius:8px;
+  text-align:center;
+  transition:background 0.15s;
+}
+.emoji-btn:hover, .emoji-btn:active { background:var(--bg-tertiary); }
+
+/* ========== TOGGLE ========== */
+.toggle {
+  width:44px;height:24px;
+  border-radius:12px;
+  background:var(--bg-tertiary);
+  position:relative;
+  cursor:pointer;
+  transition:background 0.3s;
+  flex-shrink:0;
+}
+.toggle.on { background:var(--accent); }
+.toggle-knob {
+  width:20px;height:20px;
+  border-radius:50%;
+  background:#fff;
+  position:absolute;
+  top:2px;left:2px;
+  transition:transform 0.3s;
+}
+.toggle.on .toggle-knob { transform:translateX(20px); }
+
+/* ========== XP FLOAT ========== */
+.xp-float {
+  position:absolute;
+  right:16px;top:0;
+  font-size:13px;font-weight:700;
+  color:var(--accent-light);
+  pointer-events:none;
+  animation:float 1s ease-out forwards;
+}
+
+/* ========== BADGE ========== */
+.badge-item {
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  padding:12px 8px;
+  text-align:center;
+}
+.badge-icon {
+  font-size:36px;
+  transition:all 0.3s;
+}
+.badge-icon.locked { filter:grayscale(1); opacity:0.3; }
+.badge-name { font-size:11px; color:var(--text-muted); font-weight:500; }
+
+/* ========== LOADING SPINNER ========== */
+.spinner {
+  width:24px;height:24px;
+  border:3px solid var(--bg-tertiary);
+  border-top-color:var(--accent);
+  border-radius:50%;
+  animation:spin 0.6s linear infinite;
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+/* =================================================================
+   HABITFLOW — Complete Habit Tracker PWA
+   A premium, minimal habit tracking Progressive Web App
+   ================================================================= */
+
+const { useState, useEffect, useCallback, useMemo, useRef, memo, createContext, useContext } = React;
+const {
+  LineChart, Line, AreaChart, Area, BarChart, Bar, RadarChart, Radar,
+  PolarGrid, PolarAngleAxis, PolarRadiusAxis,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
+  PieChart, Pie
+} = Recharts;
+
+/* =================================================================
+   CONSTANTS
+   ================================================================= */
+
+const CATEGORY_COLORS = {
+  health:'#4CAF50', fitness:'#FF5722', learning:'#2196F3',
+  mindfulness:'#9C27B0', productivity:'#FF9800', social:'#E91E63',
+  finance:'#00BCD4', creativity:'#FFC107'
+};
+
+const CATEGORY_LIST = Object.keys(CATEGORY_COLORS);
+
+const LEVEL_THRESHOLDS = [
+  {level:1, name:'Beginner', xp:0, icon:'🌱'},
+  {level:2, name:'Getting Started', xp:100, icon:'🌿'},
+  {level:3, name:'Building Momentum', xp:300, icon:'🌳'},
+  {level:4, name:'Committed', xp:600, icon:'💪'},
+  {level:5, name:'Consistent', xp:1000, icon:'⭐'},
+  {level:6, name:'Dedicated', xp:1500, icon:'🔥'},
+  {level:7, name:'Relentless', xp:2500, icon:'💎'},
+  {level:8, name:'Unstoppable', xp:4000, icon:'🚀'},
+  {level:9, name:'Master', xp:6000, icon:'👑'},
+  {level:10, name:'Legend', xp:10000, icon:'🏆'}
+];
+
+const BADGES = [
+  {id:'first_step',icon:'🌱',name:'First Step',desc:'Complete your first habit'},
+  {id:'perfect_day',icon:'✅',name:'Perfect Day',desc:'Complete all habits in a single day'},
+  {id:'perfect_week',icon:'🗓️',name:'Perfect Week',desc:'100% completion for 7 consecutive days'},
+  {id:'perfect_month',icon:'📅',name:'Perfect Month',desc:'100% completion for 30 consecutive days'},
+  {id:'on_fire',icon:'🔥',name:'On Fire',desc:'7-day streak on any habit'},
+  {id:'iron_streak',icon:'💪',name:'Iron Streak',desc:'30-day streak on any habit'},
+  {id:'diamond_streak',icon:'💎',name:'Diamond Streak',desc:'100-day streak on any habit'},
+  {id:'unbreakable',icon:'👑',name:'Unbreakable',desc:'365-day streak on any habit'},
+  {id:'early_bird',icon:'🌅',name:'Early Bird',desc:'Complete all morning habits before 8 AM'},
+  {id:'night_owl',icon:'🦉',name:'Night Owl',desc:'Complete all evening habits after 8 PM'},
+  {id:'centurion',icon:'💯',name:'Centurion',desc:'100 total completions on a single habit'},
+  {id:'thousand_club',icon:'🎯',name:'Thousand Club',desc:'1,000 total completions across all habits'},
+  {id:'habit_collector',icon:'📚',name:'Habit Collector',desc:'Track 10+ active habits simultaneously'},
+  {id:'comeback_kid',icon:'🔄',name:'Comeback Kid',desc:'Resume a habit after 7+ days missed and build a 7-day streak'},
+  {id:'consistency_machine',icon:'🤖',name:'Consistency Machine',desc:'90%+ completion rate for a full month'},
+  {id:'speed_demon',icon:'⚡',name:'Speed Demon',desc:'Complete all daily habits within 1 hour'},
+  {id:'zen_master',icon:'🧘',name:'Zen Master',desc:'Complete a mindfulness habit for 50 days'},
+  {id:'bookworm',icon:'📖',name:'Bookworm',desc:'Complete a learning habit for 50 days'},
+  {id:'athlete',icon:'🏃',name:'Athlete',desc:'Complete a fitness habit for 50 days'},
+  {id:'overachiever',icon:'🌟',name:'Overachiever',desc:'Exceed a quantifiable habit target by 50%+'},
+  {id:'party_of_one',icon:'🎉',name:'Party of One',desc:'Celebrate 1 year since creating the app'}
+];
+
+const MOOD_EMOJIS = [{val:5,emoji:'😄',label:'Great'},{val:4,emoji:'🙂',label:'Good'},{val:3,emoji:'😐',label:'Okay'},{val:2,emoji:'😔',label:'Bad'},{val:1,emoji:'😢',label:'Terrible'}];
+const MOOD_TAGS = ['Well rested','Stressed','Productive','Anxious','Happy','Tired','Motivated','Sick'];
+const HABIT_EMOJIS = ['🏃','💧','📚','🧘','💪','🍎','😴','✍️','🎯','🧠','🎨','🎵','💰','🌱','🏋️','🧹','📝','🥗','🚶','💊','☀️','🌙','🔥','❤️','🙏','🌊','⏰','📱','🍵','🧘‍♂️'];
+
+const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DAY_KEYS = ['sun','mon','tue','wed','thu','fri','sat'];
+const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const HABIT_TEMPLATES = {
+  morning: {
+    name:'🌅 Morning Routine',
+    habits:[
+      {name:'Wake Early',emoji:'⏰',category:'productivity',difficulty:'medium'},
+      {name:'Make Bed',emoji:'🛏️',category:'productivity',difficulty:'easy'},
+      {name:'Drink Water',emoji:'💧',category:'health',difficulty:'easy',isQuantifiable:true,target:{value:1,unit:'glass'}},
+      {name:'Meditate',emoji:'🧘',category:'mindfulness',difficulty:'medium'},
+      {name:'Exercise',emoji:'🏋️',category:'fitness',difficulty:'hard'},
+      {name:'Healthy Breakfast',emoji:'🥗',category:'health',difficulty:'easy'},
+      {name:'Plan Day',emoji:'📝',category:'productivity',difficulty:'easy'}
+    ]
+  },
+  learning: {
+    name:'🧠 Learning',
+    habits:[
+      {name:'Read 30 min',emoji:'📚',category:'learning',difficulty:'medium'},
+      {name:'Practice Skill',emoji:'🎯',category:'learning',difficulty:'hard'},
+      {name:'Take Notes',emoji:'✍️',category:'learning',difficulty:'easy'},
+      {name:'Review Flashcards',emoji:'🧠',category:'learning',difficulty:'easy'}
+    ]
+  },
+  fitness: {
+    name:'🏋️ Fitness',
+    habits:[
+      {name:'Workout',emoji:'🏋️',category:'fitness',difficulty:'hard'},
+      {name:'Stretch',emoji:'🧘',category:'fitness',difficulty:'easy'},
+      {name:'Track Calories',emoji:'🍎',category:'health',difficulty:'medium'},
+      {name:'Drink Water',emoji:'💧',category:'health',difficulty:'easy',isQuantifiable:true,target:{value:8,unit:'glasses'}},
+      {name:'Sleep 8 Hours',emoji:'😴',category:'health',difficulty:'medium'}
+    ]
+  },
+  mindfulness: {
+    name:'🧘 Mindfulness',
+    habits:[
+      {name:'Meditate',emoji:'🧘',category:'mindfulness',difficulty:'medium'},
+      {name:'Journal',emoji:'✍️',category:'mindfulness',difficulty:'easy'},
+      {name:'Gratitude',emoji:'🙏',category:'mindfulness',difficulty:'easy'},
+      {name:'Digital Detox',emoji:'📱',category:'mindfulness',difficulty:'hard'},
+      {name:'Nature Walk',emoji:'🌱',category:'mindfulness',difficulty:'easy'}
+    ]
+  },
+  productivity: {
+    name:'💰 Productivity',
+    habits:[
+      {name:'Deep Work 2h',emoji:'🎯',category:'productivity',difficulty:'hard'},
+      {name:'No Social Media',emoji:'📱',category:'productivity',difficulty:'hard'},
+      {name:'Inbox Zero',emoji:'📧',category:'productivity',difficulty:'medium'},
+      {name:'Review Goals',emoji:'📝',category:'productivity',difficulty:'easy'},
+      {name:'Learn Something New',emoji:'🧠',category:'learning',difficulty:'easy'}
+    ]
+  }
+};
+
+/* =================================================================
+   STORAGE UTILITIES
+   ================================================================= */
+
+const Storage = {
+  async get(key) {
+    try { const v = await window.storage.get(key); return v ? JSON.parse(v) : null; }
+    catch(e) { console.error('Storage get error:', key, e); return null; }
+  },
+  async set(key, value) {
+    try { await window.storage.set(key, JSON.stringify(value)); return true; }
+    catch(e) { console.error('Storage set error:', key, e); return false; }
+  },
+  async delete(key) {
+    try { await window.storage.delete(key); return true; }
+    catch(e) { console.error('Storage delete error:', key, e); return false; }
+  },
+  async list() {
+    try { return await window.storage.list(); }
+    catch(e) { console.error('Storage list error:', e); return []; }
+  },
+  async clearAll() {
+    try {
+      const keys = await this.list();
+      for (const key of keys) await this.delete(key);
+      return true;
+    } catch(e) { console.error('Storage clearAll error:', e); return false; }
+  }
+};
+
+/* =================================================================
+   UTILITY FUNCTIONS
+   ================================================================= */
+
+function genId() {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2,9);
+}
+
+function getToday() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function getMonthKey(dateStr) {
+  return dateStr.substring(0,7);
+}
+
+function formatDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00');
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  return `${days[d.getDay()]}, ${months[d.getMonth()]} ${d.getDate()}`;
+}
+
+function getDayOfWeek(dateStr) {
+  return new Date(dateStr + 'T12:00:00').getDay();
+}
+
+function addDays(dateStr, n) {
+  const d = new Date(dateStr + 'T12:00:00');
+  d.setDate(d.getDate() + n);
+  return d.toISOString().split('T')[0];
+}
+
+function daysBetween(a, b) {
+  return Math.round((new Date(b+'T12:00:00') - new Date(a+'T12:00:00')) / 86400000);
+}
+
+function getGreeting() {
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning! ☀️';
+  if (h < 17) return 'Good afternoon! 🌤️';
+  if (h < 21) return 'Good evening! 🌅';
+  return 'Almost done for today! 🌙';
+}
+
+function isHabitScheduledOnDate(habit, dateStr) {
+  if (!habit || habit.archived) return false;
+  if (habit.startDate && dateStr < habit.startDate) return false;
+  if (habit.endDate && dateStr > habit.endDate) return false;
+  const dow = getDayOfWeek(dateStr);
+  const dayKey = DAY_KEYS[dow];
+  if (habit.restDays && habit.restDays.includes(dayKey)) return false;
+  if (habit.frequency?.type === 'specific_days') {
+    return habit.frequency.days && habit.frequency.days.includes(dayKey);
+  }
+  return true;
+}
+
+function getTimeOfDayLabel(tod) {
+  if (tod === 'morning') return '☀️ Morning';
+  if (tod === 'afternoon') return '🌤️ Afternoon';
+  return '🌙 Evening';
+}
+
+function getCategoryColor(cat) {
+  return CATEGORY_COLORS[cat] || '#6366f1';
+}
+
+function getLevelInfo(xp) {
+  let lvl = LEVEL_THRESHOLDS[0];
+  for (const t of LEVEL_THRESHOLDS) {
+    if (xp >= t.xp) lvl = t; else break;
+  }
+  const nextIdx = LEVEL_THRESHOLDS.findIndex(t => t.level === lvl.level) + 1;
+  const next = nextIdx < LEVEL_THRESHOLDS.length ? LEVEL_THRESHOLDS[nextIdx] : null;
+  const xpForNext = next ? next.xp - lvl.xp : 0;
+  const xpProgress = next ? xp - lvl.xp : 0;
+  return { ...lvl, next, xpForNext, xpProgress, xpTotal: xp };
+}
+
+function getXpReward(difficulty) {
+  if (difficulty === 'easy') return 5;
+  if (difficulty === 'medium') return 10;
+  return 20;
+}
+
+/* =================================================================
+   APP CONTEXT
+   ================================================================= */
+
+const AppContext = createContext(null);
+
+function useApp() { return useContext(AppContext); }
+
+/* =================================================================
+   TOAST SYSTEM
+   ================================================================= */
+
+let toastIdCounter = 0;
+
+function ToastContainer({ toasts, removeToast }) {
+  return (
+    <div className="toast-container">
+      {toasts.map(t => (
+        <div key={t.id} className="toast" style={{position:'relative',overflow:'hidden'}}>
+          <span style={{fontSize:'18px'}}>{t.icon || '✅'}</span>
+          <span style={{flex:1,fontSize:'14px'}}>{t.message}</span>
+          {t.undoAction && (
+            <button onClick={() => { t.undoAction(); removeToast(t.id); }}
+              style={{color:'var(--accent-light)',fontWeight:600,fontSize:'14px'}}>Undo</button>
+          )}
+          <div className="toast-progress" style={{animationDuration:(t.duration||5000)+'ms'}}
+            onAnimationEnd={() => removeToast(t.id)} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* =================================================================
+   CONFETTI SYSTEM
+   ================================================================= */
+
+function Confetti({ active, onDone }) {
+  const [pieces, setPieces] = useState([]);
+  useEffect(() => {
+    if (!active) return;
+    const colors = ['#6366f1','#22c55e','#f59e0b','#ef4444','#ec4899','#06b6d4','#8b5cf6'];
+    const p = Array.from({length:50}, (_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      delay: Math.random() * 2,
+      size: 6 + Math.random() * 8,
+      shape: Math.random() > 0.5 ? 'circle' : 'square'
+    }));
+    setPieces(p);
+    const timer = setTimeout(() => { setPieces([]); onDone?.(); }, 3500);
+    return () => clearTimeout(timer);
+  }, [active]);
+
+  return pieces.map(p => (
+    <div key={p.id} className="confetti-piece" style={{
+      left: p.left + '%',
+      top: -20,
+      width: p.size, height: p.size,
+      background: p.color,
+      borderRadius: p.shape === 'circle' ? '50%' : '2px',
+      animationDelay: p.delay + 's',
+      animationDuration: (2 + Math.random() * 2) + 's'
+    }} />
+  ));
+}
+
+/* =================================================================
+   PROGRESS RING COMPONENT
+   ================================================================= */
+
+function ProgressRing({ progress, size = 120, strokeWidth = 8, children }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (progress / 100) * circumference;
+
+  return (
+    <div style={{position:'relative',width:size,height:size}}>
+      <svg width={size} height={size}>
+        <circle cx={size/2} cy={size/2} r={radius}
+          fill="none" stroke="var(--bg-tertiary)" strokeWidth={strokeWidth} />
+        <circle cx={size/2} cy={size/2} r={radius}
+          fill="none" stroke="var(--accent)" strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="progress-ring-circle"
+          style={{transform:'rotate(-90deg)',transformOrigin:'center'}} />
+      </svg>
+      <div style={{position:'absolute',inset:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center'}}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/* =================================================================
+   TOGGLE COMPONENT
+   ================================================================= */
+
+function Toggle({ value, onChange }) {
+  return (
+    <div className={`toggle ${value ? 'on' : ''}`} onClick={() => onChange(!value)}>
+      <div className="toggle-knob" />
+    </div>
+  );
+}
+
+/* =================================================================
+   ONBOARDING FLOW
+   ================================================================= */
+
+function Onboarding({ onComplete }) {
+  const [step, setStep] = useState(0);
+  const [goals, setGoals] = useState([]);
+  const [selectedHabits, setSelectedHabits] = useState([]);
+
+  const goalOptions = [
+    {id:'health',emoji:'🏋️',text:'Get healthier'},
+    {id:'learning',emoji:'📚',text:'Learn more'},
+    {id:'mindfulness',emoji:'🧘',text:'Be more mindful'},
+    {id:'fitness',emoji:'💪',text:'Build fitness'},
+    {id:'productivity',emoji:'💰',text:'Be more productive'},
+    {id:'creativity',emoji:'🎨',text:'Be more creative'},
+    {id:'sleep',emoji:'😴',text:'Sleep better'},
+    {id:'hydration',emoji:'💧',text:'Stay hydrated'}
+  ];
+
+  const goalToTemplates = {
+    health:['morning'], learning:['learning'], mindfulness:['mindfulness'],
+    fitness:['fitness'], productivity:['productivity'], creativity:['learning'],
+    sleep:['morning'], hydration:['morning']
+  };
+
+  const suggestedHabits = useMemo(() => {
+    const templateKeys = new Set();
+    goals.forEach(g => (goalToTemplates[g]||[]).forEach(t => templateKeys.add(t)));
+    if (templateKeys.size === 0) templateKeys.add('morning');
+    const habits = [];
+    const seen = new Set();
+    templateKeys.forEach(k => {
+      (HABIT_TEMPLATES[k]?.habits || []).forEach(h => {
+        if (!seen.has(h.name)) { seen.add(h.name); habits.push(h); }
+      });
+    });
+    return habits;
+  }, [goals]);
+
+  useEffect(() => {
+    if (step === 2) setSelectedHabits(suggestedHabits.map(h => h.name));
+  }, [step, suggestedHabits]);
+
+  const toggleGoal = (id) => {
+    setGoals(prev => prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]);
+  };
+
+  const toggleHabit = (name) => {
+    setSelectedHabits(prev => prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]);
+  };
+
+  const finish = () => {
+    const habits = suggestedHabits
+      .filter(h => selectedHabits.includes(h.name))
+      .map((h, i) => ({
+        id: genId(),
+        name: h.name,
+        emoji: h.emoji,
+        description: '',
+        category: h.category || 'health',
+        color: getCategoryColor(h.category),
+        frequency: { type: 'daily', days: [...DAY_KEYS], timesPerWeek: 7 },
+        timeOfDay: i < 3 ? 'morning' : i < 5 ? 'afternoon' : 'evening',
+        isQuantifiable: h.isQuantifiable || false,
+        target: h.target || { value: 1, unit: 'times' },
+        difficulty: h.difficulty || 'medium',
+        xpReward: getXpReward(h.difficulty || 'medium'),
+        streakFreezeEnabled: true,
+        maxFreezes: 2,
+        restDays: [],
+        stackAfter: null,
+        startDate: getToday(),
+        endDate: null,
+        archived: false,
+        order: i,
+        createdAt: new Date().toISOString()
+      }));
+    onComplete(habits);
+  };
+
+  const tourCards = [
+    {emoji:'✅',title:'Tap to Complete',desc:'Check off habits as you do them throughout the day'},
+    {emoji:'🔥',title:'Build Streaks',desc:"Don't break the chain — consistency is key"},
+    {emoji:'📊',title:'Track Progress',desc:'See your stats, trends, and patterns over time'},
+    {emoji:'🏆',title:'Earn Rewards',desc:'Level up, unlock badges, and complete challenges'}
+  ];
+
+  return (
+    <div className="app-container" style={{background:'var(--bg-primary)'}}>
+      {step === 0 && (
+        <div className="onboard-screen fade-in">
+          <div className="onboard-icon">🌊</div>
+          <div className="onboard-title">Welcome to HabitFlow</div>
+          <div className="onboard-subtitle">Build better habits, one day at a time</div>
+          <button className="btn-primary" onClick={() => setStep(1)}>Get Started</button>
+        </div>
+      )}
+
+      {step === 1 && (
+        <div className="onboard-screen fade-in" style={{justifyContent:'flex-start',paddingTop:'calc(var(--safe-top) + 40px)'}}>
+          <div style={{fontSize:'24px',fontWeight:700,marginBottom:8}}>What do you want to focus on?</div>
+          <div style={{color:'var(--text-secondary)',marginBottom:24}}>Select all that apply</div>
+          <div style={{display:'flex',flexDirection:'column',gap:10,width:'100%',marginBottom:32}}>
+            {goalOptions.map(g => (
+              <div key={g.id} className={`goal-card ${goals.includes(g.id)?'selected':''}`}
+                onClick={() => toggleGoal(g.id)}>
+                <span className="goal-emoji">{g.emoji}</span>
+                <span className="goal-text">{g.text}</span>
+                {goals.includes(g.id) && <span style={{marginLeft:'auto',color:'var(--accent-light)'}}>✓</span>}
+              </div>
+            ))}
+          </div>
+          <button className="btn-primary" onClick={() => setStep(2)}
+            disabled={goals.length === 0}
+            style={{opacity: goals.length === 0 ? 0.5 : 1}}>
+            Continue
+          </button>
+        </div>
+      )}
+
+      {step === 2 && (
+        <div className="onboard-screen fade-in" style={{justifyContent:'flex-start',paddingTop:'calc(var(--safe-top) + 40px)'}}>
+          <div style={{fontSize:'24px',fontWeight:700,marginBottom:8}}>Pick your starter habits</div>
+          <div style={{color:'var(--text-secondary)',marginBottom:24}}>Toggle the ones you want</div>
+          <div style={{display:'flex',flexDirection:'column',gap:8,width:'100%',marginBottom:32,flex:1,overflowY:'auto'}}>
+            {suggestedHabits.map(h => (
+              <div key={h.name} className={`goal-card ${selectedHabits.includes(h.name)?'selected':''}`}
+                onClick={() => toggleHabit(h.name)}>
+                <span style={{fontSize:'24px'}}>{h.emoji}</span>
+                <span className="goal-text">{h.name}</span>
+                <span style={{marginLeft:'auto',fontSize:'12px',color:'var(--text-muted)',textTransform:'capitalize'}}>{h.difficulty}</span>
+                {selectedHabits.includes(h.name) && <span style={{color:'var(--accent-light)'}}>✓</span>}
+              </div>
+            ))}
+          </div>
+          <button className="btn-primary" onClick={() => setStep(3)}
+            disabled={selectedHabits.length === 0}
+            style={{opacity: selectedHabits.length === 0 ? 0.5 : 1}}>
+            Start with {selectedHabits.length} habit{selectedHabits.length !== 1 ? 's' : ''}
+          </button>
+        </div>
+      )}
+
+      {step === 3 && (
+        <div className="onboard-screen fade-in" style={{justifyContent:'flex-start',paddingTop:'calc(var(--safe-top) + 40px)'}}>
+          <div style={{fontSize:'24px',fontWeight:700,marginBottom:24}}>Quick Tour</div>
+          <div style={{display:'flex',flexDirection:'column',gap:16,width:'100%',marginBottom:32}}>
+            {tourCards.map((c,i) => (
+              <div key={i} className="card fade-in" style={{animationDelay:(i*0.1)+'s',display:'flex',alignItems:'center',gap:16}}>
+                <span style={{fontSize:'36px'}}>{c.emoji}</span>
+                <div>
+                  <div style={{fontWeight:600,fontSize:'15px'}}>{c.title}</div>
+                  <div style={{fontSize:'13px',color:'var(--text-secondary)',marginTop:2}}>{c.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button className="btn-primary" onClick={finish}>Let's go!</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* =================================================================
+   ADD/EDIT HABIT MODAL
+   ================================================================= */
+
+function HabitModal({ habit, onSave, onDelete, onClose }) {
+  const isEdit = !!habit;
+  const [form, setForm] = useState({
+    name: habit?.name || '',
+    emoji: habit?.emoji || '🎯',
+    description: habit?.description || '',
+    category: habit?.category || 'health',
+    frequency: habit?.frequency || {type:'daily',days:[...DAY_KEYS],timesPerWeek:7},
+    timeOfDay: habit?.timeOfDay || 'morning',
+    isQuantifiable: habit?.isQuantifiable || false,
+    target: habit?.target || {value:1, unit:'times'},
+    difficulty: habit?.difficulty || 'medium',
+    streakFreezeEnabled: habit?.streakFreezeEnabled ?? true,
+    maxFreezes: habit?.maxFreezes || 2,
+    restDays: habit?.restDays || [],
+  });
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const update = (key, val) => setForm(f => ({...f, [key]: val}));
+
+  const save = () => {
+    if (!form.name.trim()) return;
+    const data = {
+      ...(habit || {}),
+      id: habit?.id || genId(),
+      name: form.name.trim(),
+      emoji: form.emoji,
+      description: form.description,
+      category: form.category,
+      color: getCategoryColor(form.category),
+      frequency: form.frequency,
+      timeOfDay: form.timeOfDay,
+      isQuantifiable: form.isQuantifiable,
+      target: form.target,
+      difficulty: form.difficulty,
+      xpReward: getXpReward(form.difficulty),
+      streakFreezeEnabled: form.streakFreezeEnabled,
+      maxFreezes: form.maxFreezes,
+      restDays: form.restDays,
+      stackAfter: habit?.stackAfter || null,
+      startDate: habit?.startDate || getToday(),
+      endDate: habit?.endDate || null,
+      archived: habit?.archived || false,
+      order: habit?.order ?? 999,
+      createdAt: habit?.createdAt || new Date().toISOString()
+    };
+    onSave(data);
+  };
+
+  const toggleDay = (day) => {
+    const newDays = form.frequency.days.includes(day)
+      ? form.frequency.days.filter(d => d !== day)
+      : [...form.frequency.days, day];
+    update('frequency', {...form.frequency, days: newDays});
+  };
+
+  const toggleRestDay = (day) => {
+    update('restDays', form.restDays.includes(day)
+      ? form.restDays.filter(d => d !== day)
+      : [...form.restDays, day]);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content">
+        <div className="modal-handle" />
+        <div style={{fontSize:'20px',fontWeight:700,marginBottom:20}}>
+          {isEdit ? 'Edit Habit' : 'New Habit'}
+        </div>
+
+        {/* Emoji & Name */}
+        <div style={{display:'flex',gap:12,marginBottom:16}}>
+          <button onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            style={{fontSize:'32px',width:56,height:56,background:'var(--bg-tertiary)',borderRadius:12,
+              display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            {form.emoji}
+          </button>
+          <input className="input" placeholder="Habit name" value={form.name}
+            onChange={e => update('name', e.target.value)} />
+        </div>
+
+        {showEmojiPicker && (
+          <div className="emoji-grid" style={{marginBottom:16}}>
+            {HABIT_EMOJIS.map(e => (
+              <button key={e} className="emoji-btn"
+                onClick={() => { update('emoji', e); setShowEmojiPicker(false); }}>{e}</button>
+            ))}
+          </div>
+        )}
+
+        {/* Description */}
+        <textarea className="input" placeholder="Why do you do this? (optional)" value={form.description}
+          onChange={e => update('description', e.target.value)}
+          style={{marginBottom:16,minHeight:60}} />
+
+        {/* Category */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,fontWeight:600}}>Category</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {CATEGORY_LIST.map(c => (
+              <button key={c} className={`chip ${form.category===c?'active':''}`}
+                onClick={() => update('category', c)}
+                style={form.category===c ? {borderColor:CATEGORY_COLORS[c],color:CATEGORY_COLORS[c],
+                  background:CATEGORY_COLORS[c]+'22'} : {}}>
+                <span style={{width:8,height:8,borderRadius:4,background:CATEGORY_COLORS[c],marginRight:6}} />
+                {c.charAt(0).toUpperCase()+c.slice(1)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Frequency */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,fontWeight:600}}>Frequency</div>
+          <div style={{display:'flex',gap:8,marginBottom:8}}>
+            {[{v:'daily',l:'Daily'},{v:'specific_days',l:'Specific Days'},{v:'times_per_week',l:'X per Week'}].map(f => (
+              <button key={f.v} className={`chip ${form.frequency.type===f.v?'active':''}`}
+                onClick={() => update('frequency', {...form.frequency, type:f.v})}>{f.l}</button>
+            ))}
+          </div>
+          {form.frequency.type === 'specific_days' && (
+            <div style={{display:'flex',gap:6}}>
+              {DAY_KEYS.map((d,i) => (
+                <button key={d} onClick={() => toggleDay(d)}
+                  style={{width:36,height:36,borderRadius:18,fontSize:'12px',fontWeight:600,
+                    background:form.frequency.days.includes(d)?'var(--accent)':'var(--bg-tertiary)',
+                    color:form.frequency.days.includes(d)?'#fff':'var(--text-secondary)'}}>
+                  {DAY_NAMES[i].charAt(0)}
+                </button>
+              ))}
+            </div>
+          )}
+          {form.frequency.type === 'times_per_week' && (
+            <div style={{display:'flex',alignItems:'center',gap:12}}>
+              <button className="btn-secondary" onClick={() => update('frequency',{...form.frequency,timesPerWeek:Math.max(1,form.frequency.timesPerWeek-1)})}>−</button>
+              <span style={{fontSize:'18px',fontWeight:700,minWidth:40,textAlign:'center'}}>{form.frequency.timesPerWeek}x</span>
+              <button className="btn-secondary" onClick={() => update('frequency',{...form.frequency,timesPerWeek:Math.min(7,form.frequency.timesPerWeek+1)})}>+</button>
+              <span style={{color:'var(--text-muted)',fontSize:'14px'}}>per week</span>
+            </div>
+          )}
+        </div>
+
+        {/* Time of Day */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,fontWeight:600}}>Time of Day</div>
+          <div style={{display:'flex',gap:8}}>
+            {[{v:'morning',l:'☀️ Morning'},{v:'afternoon',l:'🌤️ Afternoon'},{v:'evening',l:'🌙 Evening'}].map(t => (
+              <button key={t.v} className={`chip ${form.timeOfDay===t.v?'active':''}`}
+                onClick={() => update('timeOfDay', t.v)}>{t.l}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Quantifiable */}
+        <div style={{marginBottom:16}}>
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div>
+              <div style={{fontSize:'14px',fontWeight:600}}>Quantifiable</div>
+              <div style={{fontSize:'12px',color:'var(--text-muted)'}}>Track a number (e.g., 8 glasses of water)</div>
+            </div>
+            <Toggle value={form.isQuantifiable} onChange={v => update('isQuantifiable', v)} />
+          </div>
+          {form.isQuantifiable && (
+            <div style={{display:'flex',gap:8}}>
+              <input className="input" type="number" value={form.target.value}
+                onChange={e => update('target', {...form.target, value: parseInt(e.target.value)||1})}
+                style={{width:80}} />
+              <input className="input" placeholder="unit (e.g., glasses)" value={form.target.unit}
+                onChange={e => update('target', {...form.target, unit: e.target.value})} />
+            </div>
+          )}
+        </div>
+
+        {/* Difficulty */}
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,fontWeight:600}}>Difficulty (affects XP)</div>
+          <div style={{display:'flex',gap:8}}>
+            {[{v:'easy',l:'Easy (5 XP)',c:'var(--success)'},{v:'medium',l:'Medium (10 XP)',c:'var(--warning)'},{v:'hard',l:'Hard (20 XP)',c:'var(--danger)'}].map(d => (
+              <button key={d.v} className={`chip ${form.difficulty===d.v?'active':''}`}
+                onClick={() => update('difficulty', d.v)}
+                style={form.difficulty===d.v ? {borderColor:d.c,color:d.c} : {}}>{d.l}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Streak Freeze */}
+        <div style={{marginBottom:16,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:'14px',fontWeight:600}}>Streak Freeze ❄️</div>
+            <div style={{fontSize:'12px',color:'var(--text-muted)'}}>Protect your streak ({form.maxFreezes} max)</div>
+          </div>
+          <Toggle value={form.streakFreezeEnabled} onChange={v => update('streakFreezeEnabled', v)} />
+        </div>
+
+        {/* Rest Days */}
+        <div style={{marginBottom:24}}>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,fontWeight:600}}>Rest Days</div>
+          <div style={{display:'flex',gap:6}}>
+            {DAY_KEYS.map((d,i) => (
+              <button key={d} onClick={() => toggleRestDay(d)}
+                style={{width:36,height:36,borderRadius:18,fontSize:'12px',fontWeight:600,
+                  background:form.restDays.includes(d)?'var(--warning)':'var(--bg-tertiary)',
+                  color:form.restDays.includes(d)?'#000':'var(--text-secondary)'}}>
+                {DAY_NAMES[i].charAt(0)}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+          <button className="btn-primary" onClick={save}>{isEdit ? 'Save Changes' : 'Create Habit'}</button>
+          {isEdit && !showDeleteConfirm && (
+            <button className="btn-danger" style={{width:'100%'}} onClick={() => setShowDeleteConfirm(true)}>Delete Habit</button>
+          )}
+          {showDeleteConfirm && (
+            <div style={{background:'rgba(239,68,68,0.1)',border:'1px solid var(--danger)',borderRadius:12,padding:16}}>
+              <div style={{fontSize:'14px',fontWeight:600,color:'var(--danger)',marginBottom:8}}>Delete this habit?</div>
+              <div style={{display:'flex',gap:8}}>
+                <button className="btn-danger" style={{flex:1}} onClick={() => onDelete(habit.id)}>Yes, Delete</button>
+                <button className="btn-secondary" style={{flex:1}} onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+              </div>
+            </div>
+          )}
+          <button style={{padding:'10px',color:'var(--text-muted)',fontSize:'14px'}} onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =================================================================
+   MOOD CHECK-IN MODAL
+   ================================================================= */
+
+function MoodModal({ onSave, onClose }) {
+  const [mood, setMood] = useState(0);
+  const [energy, setEnergy] = useState(0);
+  const [tags, setTags] = useState([]);
+  const [gratitude, setGratitude] = useState('');
+  const [note, setNote] = useState('');
+
+  const toggleTag = (t) => setTags(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t]);
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content">
+        <div className="modal-handle" />
+        <div style={{textAlign:'center',marginBottom:20}}>
+          <div style={{fontSize:'20px',fontWeight:700}}>How are you feeling?</div>
+        </div>
+
+        <div style={{display:'flex',justifyContent:'center',gap:12,marginBottom:24}}>
+          {MOOD_EMOJIS.map(m => (
+            <button key={m.val} onClick={() => setMood(m.val)}
+              style={{fontSize:'36px',padding:8,borderRadius:12,
+                background:mood===m.val?'var(--accent-dim)':'transparent',
+                border:mood===m.val?'2px solid var(--accent)':'2px solid transparent',
+                transition:'all 0.2s'}}>
+              {m.emoji}
+              <div style={{fontSize:'10px',color:'var(--text-muted)',marginTop:2}}>{m.label}</div>
+            </button>
+          ))}
+        </div>
+
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:'15px',fontWeight:600,marginBottom:10}}>Energy Level</div>
+          <div style={{display:'flex',justifyContent:'center',gap:12}}>
+            {[1,2,3,4,5].map(e => (
+              <button key={e} onClick={() => setEnergy(e)}
+                style={{fontSize:'28px',padding:6,borderRadius:10,
+                  background:energy>=e?'var(--accent-dim)':'transparent',
+                  border:energy>=e?'2px solid var(--accent)':'2px solid transparent'}}>
+                {energy >= e ? '🔋' : '🪫'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:'15px',fontWeight:600,marginBottom:10}}>Tags</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {MOOD_TAGS.map(t => (
+              <button key={t} className={`chip ${tags.includes(t)?'active':''}`}
+                onClick={() => toggleTag(t)}>{t}</button>
+            ))}
+          </div>
+        </div>
+
+        <input className="input" placeholder="What's one good thing today? 🙏" value={gratitude}
+          onChange={e => setGratitude(e.target.value)} style={{marginBottom:12}} />
+        <textarea className="input" placeholder="Any thoughts? (optional)" value={note}
+          onChange={e => setNote(e.target.value)} style={{marginBottom:20}} />
+
+        <div style={{display:'flex',gap:10}}>
+          <button className="btn-secondary" style={{flex:1}} onClick={onClose}>Skip</button>
+          <button className="btn-primary" style={{flex:2,opacity:mood?1:0.5}} disabled={!mood}
+            onClick={() => mood && onSave({mood,energy,tags,gratitude,note,timestamp:new Date().toISOString()})}>
+            Save
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =================================================================
+   SKIP REASON MODAL
+   ================================================================= */
+
+function SkipModal({ habitName, onSkip, onClose }) {
+  const reasons = ['Sick','Travel','Rest Day','Other'];
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content" style={{maxHeight:'50vh'}}>
+        <div className="modal-handle" />
+        <div style={{fontSize:'18px',fontWeight:700,marginBottom:4}}>Skip {habitName}?</div>
+        <div style={{color:'var(--text-muted)',fontSize:'14px',marginBottom:16}}>Choose a reason</div>
+        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+          {reasons.map(r => (
+            <button key={r} className="card" style={{textAlign:'left',fontSize:'15px',fontWeight:500}}
+              onClick={() => onSkip(r)}>{r}</button>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* =================================================================
+   DAY DETAIL MODAL
+   ================================================================= */
+
+function DayDetailModal({ dateStr, habits, completions, moodData, onClose }) {
+  const dayCompletions = completions?.[dateStr] || {};
+  const mood = moodData?.[dateStr];
+  const scheduled = habits.filter(h => isHabitScheduledOnDate(h, dateStr));
+  const completed = scheduled.filter(h => dayCompletions[h.id]?.completed);
+  const pct = scheduled.length ? Math.round((completed.length / scheduled.length) * 100) : 0;
+
+  return (
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal-content" style={{maxHeight:'70vh'}}>
+        <div className="modal-handle" />
+        <div style={{fontSize:'18px',fontWeight:700,marginBottom:4}}>{formatDate(dateStr)}</div>
+        <div style={{color:'var(--accent-light)',fontSize:'14px',fontWeight:600,marginBottom:16}}>{pct}% complete</div>
+
+        {scheduled.length === 0 && (
+          <div style={{color:'var(--text-muted)',padding:'20px 0',textAlign:'center'}}>No habits scheduled</div>
+        )}
+
+        {scheduled.map(h => {
+          const c = dayCompletions[h.id];
+          const done = c?.completed;
+          const skipped = c?.skipped;
+          return (
+            <div key={h.id} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 0',
+              borderBottom:'1px solid var(--border)'}}>
+              <span style={{fontSize:'20px'}}>{h.emoji}</span>
+              <span style={{flex:1,fontSize:'14px',fontWeight:500,
+                textDecoration:done?'line-through':'none',
+                opacity:done?0.6:1}}>{h.name}</span>
+              <span style={{fontSize:'14px'}}>
+                {done ? '✅' : skipped ? '⏭️' : '⭕'}
+              </span>
+            </div>
+          );
+        })}
+
+        {mood && (
+          <div style={{marginTop:16,padding:12,background:'var(--bg-secondary)',borderRadius:12}}>
+            <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8}}>Mood</div>
+            <div style={{display:'flex',gap:8,alignItems:'center'}}>
+              <span style={{fontSize:'24px'}}>{MOOD_EMOJIS.find(m => m.val === mood.mood)?.emoji}</span>
+              <span style={{fontSize:'14px',color:'var(--text-secondary)'}}>
+                Energy: {'🔋'.repeat(mood.energy || 0)}
+              </span>
+            </div>
+            {mood.tags?.length > 0 && (
+              <div style={{display:'flex',gap:4,flexWrap:'wrap',marginTop:8}}>
+                {mood.tags.map(t => <span key={t} className="chip" style={{fontSize:'11px',padding:'3px 8px'}}>{t}</span>)}
+              </div>
+            )}
+            {mood.note && <div style={{fontSize:'13px',color:'var(--text-secondary)',marginTop:8}}>{mood.note}</div>}
+          </div>
+        )}
+
+        <button className="btn-secondary" style={{width:'100%',marginTop:16}} onClick={onClose}>Close</button>
+      </div>
+    </div>
+  );
+}
+
+/* =================================================================
+   TODAY TAB
+   ================================================================= */
+
+const TodayTab = memo(function TodayTab() {
+  const app = useApp();
+  const { habits, todayCompletions, streaks, gamification, completeHabit, skipHabit, setQtyValue,
+    showToast, triggerConfetti } = app;
+  const today = getToday();
+
+  const scheduledHabits = useMemo(() =>
+    habits.filter(h => !h.archived && isHabitScheduledOnDate(h, today))
+      .sort((a,b) => a.order - b.order),
+    [habits, today]
+  );
+
+  const completedCount = useMemo(() =>
+    scheduledHabits.filter(h => todayCompletions[h.id]?.completed).length,
+    [scheduledHabits, todayCompletions]
+  );
+
+  const progress = scheduledHabits.length ? Math.round((completedCount / scheduledHabits.length) * 100) : 0;
+  const allDone = scheduledHabits.length > 0 && completedCount === scheduledHabits.length;
+
+  const grouped = useMemo(() => {
+    const groups = {morning:[],afternoon:[],evening:[]};
+    scheduledHabits.forEach(h => {
+      const tod = h.timeOfDay || 'morning';
+      if (groups[tod]) groups[tod].push(h);
+    });
+    return groups;
+  }, [scheduledHabits]);
+
+  const [showSkipModal, setShowSkipModal] = useState(null);
+  const [xpFloats, setXpFloats] = useState([]);
+
+  const handleComplete = useCallback((habit) => {
+    const isCompleted = todayCompletions[habit.id]?.completed;
+    if (isCompleted) {
+      completeHabit(habit.id, false);
+    } else {
+      completeHabit(habit.id, true);
+      const xpAmount = getXpReward(habit.difficulty) + Math.min(streaks[habit.id]?.current || 0, 20);
+      setXpFloats(prev => [...prev, {id: Date.now(), amount: xpAmount, habitId: habit.id}]);
+      setTimeout(() => setXpFloats(prev => prev.filter(f => f.habitId !== habit.id)), 1200);
+    }
+  }, [todayCompletions, completeHabit, streaks]);
+
+  const handleQtyTap = useCallback((habit) => {
+    const current = todayCompletions[habit.id]?.value || 0;
+    const newVal = current + 1;
+    setQtyValue(habit.id, newVal);
+    if (newVal >= habit.target.value && !todayCompletions[habit.id]?.completed) {
+      completeHabit(habit.id, true, newVal);
+    }
+  }, [todayCompletions, setQtyValue, completeHabit]);
+
+  const completeAllInGroup = useCallback((group) => {
+    grouped[group].forEach(h => {
+      if (!todayCompletions[h.id]?.completed) completeHabit(h.id, true);
+    });
+  }, [grouped, todayCompletions, completeHabit]);
+
+  // Stats for quick stats bar
+  const bestStreak = useMemo(() => {
+    let best = 0;
+    Object.values(streaks).forEach(s => { if (s.current > best) best = s.current; });
+    return best;
+  }, [streaks]);
+
+  const levelInfo = useMemo(() => getLevelInfo(gamification?.xp || 0), [gamification]);
+
+  return (
+    <div style={{padding:'0 16px',paddingTop:'calc(var(--safe-top) + 16px)'}}>
+      {/* Header */}
+      <div className="fade-in" style={{marginBottom:20}}>
+        <div style={{color:'var(--text-muted)',fontSize:'14px',marginBottom:4}}>{getGreeting()}</div>
+        <div style={{fontSize:'22px',fontWeight:700}}>{formatDate(today)}</div>
+      </div>
+
+      {/* Progress Ring */}
+      <div className="fade-in" style={{display:'flex',justifyContent:'center',marginBottom:20}}>
+        <ProgressRing progress={progress} size={130} strokeWidth={10}>
+          <div style={{fontSize:'28px',fontWeight:800}}>{progress}%</div>
+          <div style={{fontSize:'12px',color:'var(--text-muted)'}}>{completedCount} of {scheduledHabits.length}</div>
+        </ProgressRing>
+      </div>
+
+      {allDone && (
+        <div className="scale-in" style={{textAlign:'center',padding:'12px',background:'var(--accent-dim)',
+          borderRadius:12,marginBottom:16,border:'1px solid var(--accent)'}}>
+          <div style={{fontSize:'24px'}}>🎉</div>
+          <div style={{fontSize:'16px',fontWeight:700,color:'var(--accent-light)'}}>Perfect day! All habits done!</div>
+        </div>
+      )}
+
+      {/* Quick Stats */}
+      <div className="scroll-h" style={{marginBottom:20}}>
+        <div className="stat-card">
+          <div className="stat-value" style={{fontSize:'18px'}}>🔥 {bestStreak}</div>
+          <div className="stat-label">Best Streak</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{fontSize:'18px'}}>⭐ Lv.{levelInfo.level}</div>
+          <div className="stat-label">{levelInfo.name}</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-value" style={{fontSize:'18px'}}>🏆 {(gamification?.badges || []).length}</div>
+          <div className="stat-label">Badges</div>
+        </div>
+      </div>
+
+      {/* Empty State */}
+      {scheduledHabits.length === 0 && (
+        <div style={{textAlign:'center',padding:'40px 20px'}} className="fade-in">
+          <div style={{fontSize:'60px',marginBottom:16}}>🌊</div>
+          <div style={{fontSize:'18px',fontWeight:700,marginBottom:8}}>
+            {habits.length === 0 ? 'Start your journey' : 'Nothing scheduled today'}
+          </div>
+          <div style={{color:'var(--text-muted)',fontSize:'14px'}}>
+            {habits.length === 0 ? 'Add your first habit to get started!' : 'Enjoy your rest! 😌'}
+          </div>
+        </div>
+      )}
+
+      {/* Habit Groups */}
+      {['morning','afternoon','evening'].map(group => {
+        const items = grouped[group] || [];
+        if (items.length === 0) return null;
+        const allGroupDone = items.every(h => todayCompletions[h.id]?.completed);
+        const sortedItems = [...items].sort((a,b) => {
+          const aDone = todayCompletions[a.id]?.completed ? 1 : 0;
+          const bDone = todayCompletions[b.id]?.completed ? 1 : 0;
+          return aDone - bDone;
+        });
+
+        return (
+          <div key={group} style={{marginBottom:20}}>
+            <div className="section-header">{getTimeOfDayLabel(group)}</div>
+            {sortedItems.map(habit => {
+              const comp = todayCompletions[habit.id];
+              const done = comp?.completed;
+              const skipped = comp?.skipped;
+              const streak = streaks[habit.id]?.current || 0;
+              const catColor = getCategoryColor(habit.category);
+              const xpFloat = xpFloats.find(f => f.habitId === habit.id);
+
+              return (
+                <div key={habit.id}
+                  className={`habit-card ${done ? 'completed' : ''} fade-in`}
+                  style={{position:'relative'}}>
+                  <div className="cat-bar" style={{background:catColor}} />
+
+                  {/* Swipe hint areas */}
+                  <div style={{position:'absolute',left:4,top:'50%',transform:'translateY(-50%)',fontSize:'10px',
+                    color:'var(--text-muted)',opacity:0.4,display:done?'none':'block'}}>→</div>
+
+                  <div className="habit-emoji">{habit.emoji}</div>
+                  <div className="habit-info" onClick={() => {
+                    if (habit.isQuantifiable && !done) {
+                      handleQtyTap(habit);
+                    } else {
+                      handleComplete(habit);
+                    }
+                  }}>
+                    <div className="habit-name" style={{textDecoration:done?'line-through':'none'}}>
+                      {habit.name}
+                    </div>
+                    <div className="habit-meta">
+                      {streak > 0 && <span className="streak-badge">🔥 {streak}</span>}
+                      <span style={{textTransform:'capitalize'}}>{habit.category}</span>
+                      {skipped && <span style={{color:'var(--warning)'}}>Skipped</span>}
+                    </div>
+                    {habit.isQuantifiable && (
+                      <div>
+                        <div style={{display:'flex',alignItems:'center',gap:4,fontSize:'12px',
+                          color:'var(--text-secondary)',marginTop:4}}>
+                          {comp?.value || 0}/{habit.target.value} {habit.target.unit}
+                        </div>
+                        <div className="qty-bar">
+                          <div className="qty-bar-fill"
+                            style={{width:Math.min(100, ((comp?.value||0)/habit.target.value)*100)+'%',
+                              background:catColor}} />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {xpFloat && (
+                    <div className="xp-float">+{xpFloat.amount} XP</div>
+                  )}
+
+                  {!done && !skipped && (
+                    <button style={{fontSize:'12px',color:'var(--text-muted)',padding:'4px 8px',borderRadius:6,
+                      background:'var(--bg-tertiary)'}}
+                      onClick={() => setShowSkipModal(habit)}>Skip</button>
+                  )}
+
+                  <div className={`check-circle ${done ? 'done' : ''}`}
+                    style={done ? {background:catColor} : {}}
+                    onClick={() => handleComplete(habit)}>
+                    {done && (
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3"
+                        strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"
+                          strokeDasharray="50" strokeDashoffset="0" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {!allGroupDone && (
+              <button onClick={() => completeAllInGroup(group)}
+                style={{width:'100%',padding:'10px',color:'var(--accent-light)',fontSize:'13px',
+                  fontWeight:600,borderRadius:10,background:'var(--accent-dim)',marginTop:4}}>
+                Complete All {group.charAt(0).toUpperCase()+group.slice(1)}
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Skip Modal */}
+      {showSkipModal && (
+        <SkipModal habitName={showSkipModal.name}
+          onSkip={(reason) => { skipHabit(showSkipModal.id, reason); setShowSkipModal(null); }}
+          onClose={() => setShowSkipModal(null)} />
+      )}
+
+      <div style={{height:80}} />
+    </div>
+  );
+});
+
+/* =================================================================
+   CALENDAR TAB
+   ================================================================= */
+
+const CalendarTab = memo(function CalendarTab() {
+  const app = useApp();
+  const { habits, allCompletions, allMoods } = app;
+  const [view, setView] = useState('heatmap');
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [currentMonth, setCurrentMonth] = useState(() => {
+    const d = new Date();
+    return {year: d.getFullYear(), month: d.getMonth()};
+  });
+  const today = getToday();
+
+  // Generate heatmap data for last 12 months
+  const heatmapData = useMemo(() => {
+    const weeks = [];
+    const end = new Date();
+    const start = new Date();
+    start.setFullYear(start.getFullYear() - 1);
+    start.setDate(start.getDate() - start.getDay()); // align to Sunday
+
+    let current = new Date(start);
+    let week = [];
+
+    while (current <= end) {
+      const dateStr = current.toISOString().split('T')[0];
+      const monthKey = getMonthKey(dateStr);
+      const dayComps = allCompletions[monthKey]?.[dateStr] || {};
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+      const pct = scheduled.length > 0 ? (completed.length / scheduled.length) * 100 : -1;
+
+      week.push({ date: dateStr, pct, month: current.getMonth() });
+
+      if (current.getDay() === 6 || current >= end) {
+        weeks.push([...week]);
+        week = [];
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    return weeks;
+  }, [habits, allCompletions]);
+
+  const getHeatColor = (pct) => {
+    if (pct < 0) return 'var(--bg-tertiary)';
+    if (pct === 0) return '#1a1a2e';
+    if (pct <= 25) return '#312e81';
+    if (pct <= 50) return '#4338ca';
+    if (pct <= 75) return '#6366f1';
+    if (pct < 100) return '#818cf8';
+    return '#a5b4fc';
+  };
+
+  // Monthly calendar
+  const monthDays = useMemo(() => {
+    const {year, month} = currentMonth;
+    const firstDay = new Date(year, month, 1).getDay();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const days = [];
+    for (let i = 0; i < firstDay; i++) days.push(null);
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+      const monthKey = getMonthKey(dateStr);
+      const dayComps = allCompletions[monthKey]?.[dateStr] || {};
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+      const pct = scheduled.length > 0 ? Math.round((completed.length / scheduled.length) * 100) : -1;
+      days.push({date: dateStr, day: d, pct, isToday: dateStr === today});
+    }
+    return days;
+  }, [currentMonth, habits, allCompletions, today]);
+
+  // Monthly summary
+  const monthlySummary = useMemo(() => {
+    const {year, month} = currentMonth;
+    const monthKey = `${year}-${String(month+1).padStart(2,'0')}`;
+    const comps = allCompletions[monthKey] || {};
+    let totalScheduled = 0, totalCompleted = 0, bestPct = 0, worstPct = 100;
+    let bestDay = '', worstDay = '';
+
+    Object.keys(comps).forEach(dateStr => {
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => comps[dateStr]?.[h.id]?.completed);
+      if (scheduled.length > 0) {
+        totalScheduled += scheduled.length;
+        totalCompleted += completed.length;
+        const pct = (completed.length / scheduled.length) * 100;
+        if (pct >= bestPct) { bestPct = pct; bestDay = dateStr; }
+        if (pct <= worstPct) { worstPct = pct; worstDay = dateStr; }
+      }
+    });
+
+    return {
+      pct: totalScheduled > 0 ? Math.round((totalCompleted / totalScheduled) * 100) : 0,
+      totalCompleted,
+      bestDay, worstDay
+    };
+  }, [currentMonth, habits, allCompletions]);
+
+  const prevMonth = () => setCurrentMonth(({year, month}) =>
+    month === 0 ? {year: year-1, month: 11} : {year, month: month-1});
+  const nextMonth = () => setCurrentMonth(({year, month}) =>
+    month === 11 ? {year: year+1, month: 0} : {year, month: month+1});
+
+  const selectedMonthKey = `${currentMonth.year}-${String(currentMonth.month+1).padStart(2,'0')}`;
+  const selectedCompletions = allCompletions[selectedMonthKey] || {};
+  const selectedMoods = allMoods[selectedMonthKey] || {};
+
+  return (
+    <div style={{padding:'0 16px',paddingTop:'calc(var(--safe-top) + 16px)'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+        <div style={{fontSize:'22px',fontWeight:700}}>Calendar</div>
+        <div style={{display:'flex',gap:8}}>
+          <button className={`chip ${view==='heatmap'?'active':''}`} onClick={() => setView('heatmap')}>Heatmap</button>
+          <button className={`chip ${view==='monthly'?'active':''}`} onClick={() => setView('monthly')}>Monthly</button>
+        </div>
+      </div>
+
+      {/* Monthly Summary */}
+      <div className="card fade-in" style={{marginBottom:16}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+          <div>
+            <div style={{fontSize:'16px',fontWeight:700}}>
+              {MONTH_NAMES[currentMonth.month]} {currentMonth.year}
+            </div>
+            <div style={{color:'var(--accent-light)',fontSize:'14px',fontWeight:600}}>
+              {monthlySummary.pct}% consistent
+            </div>
+          </div>
+          <div style={{fontSize:'13px',color:'var(--text-muted)',textAlign:'right'}}>
+            <div>{monthlySummary.totalCompleted} completed</div>
+          </div>
+        </div>
+      </div>
+
+      {view === 'heatmap' ? (
+        /* GitHub-style Heatmap */
+        <div className="fade-in">
+          <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:8,display:'flex',gap:4}}>
+            {['S','M','T','W','T','F','S'].map((d,i) => (
+              <div key={i} style={{width:12,textAlign:'center',fontSize:'10px'}}>{i%2===0?d:''}</div>
+            ))}
+          </div>
+          <div className="heatmap-grid">
+            {heatmapData.map((week, wi) => (
+              <div key={wi} className="heatmap-col">
+                {week.map((day, di) => (
+                  <div key={di} className="heatmap-cell"
+                    style={{background: getHeatColor(day.pct),
+                      border: day.date === today ? '1px solid var(--accent)' : 'none'}}
+                    onClick={() => setSelectedDay(day.date)}
+                    title={`${day.date}: ${day.pct >= 0 ? Math.round(day.pct)+'%' : 'No data'}`} />
+                ))}
+              </div>
+            ))}
+          </div>
+          <div style={{display:'flex',alignItems:'center',gap:4,justifyContent:'flex-end',marginTop:8}}>
+            <span style={{fontSize:'10px',color:'var(--text-muted)'}}>Less</span>
+            {[0,25,50,75,100].map(p => (
+              <div key={p} style={{width:12,height:12,borderRadius:2,background:getHeatColor(p)}} />
+            ))}
+            <span style={{fontSize:'10px',color:'var(--text-muted)'}}>More</span>
+          </div>
+        </div>
+      ) : (
+        /* Monthly Calendar */
+        <div className="fade-in">
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16}}>
+            <button onClick={prevMonth} style={{fontSize:'20px',padding:'8px 12px'}}>‹</button>
+            <div style={{fontSize:'16px',fontWeight:700}}>
+              {MONTH_NAMES[currentMonth.month]} {currentMonth.year}
+            </div>
+            <button onClick={nextMonth} style={{fontSize:'20px',padding:'8px 12px'}}>›</button>
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4,marginBottom:8}}>
+            {DAY_NAMES.map(d => (
+              <div key={d} style={{textAlign:'center',fontSize:'11px',color:'var(--text-muted)',padding:4,fontWeight:600}}>{d}</div>
+            ))}
+          </div>
+
+          <div style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',gap:4}}>
+            {monthDays.map((d, i) => {
+              if (!d) return <div key={`empty-${i}`} />;
+              return (
+                <button key={d.date} onClick={() => setSelectedDay(d.date)}
+                  style={{
+                    aspectRatio:'1',
+                    borderRadius:10,
+                    display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',
+                    background: d.isToday ? 'var(--accent-dim)' : 'var(--bg-secondary)',
+                    border: d.isToday ? '1px solid var(--accent)' : '1px solid transparent',
+                    position:'relative'
+                  }}>
+                  <span style={{fontSize:'13px',fontWeight:d.isToday?700:500}}>{d.day}</span>
+                  {d.pct >= 0 && (
+                    <div style={{
+                      width:6,height:6,borderRadius:3,marginTop:2,
+                      background: d.pct === 100 ? 'var(--success)' :
+                                  d.pct >= 50 ? 'var(--accent)' :
+                                  d.pct > 0 ? 'var(--warning)' : 'var(--danger)'
+                    }} />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <button onClick={() => {
+            const d = new Date();
+            setCurrentMonth({year: d.getFullYear(), month: d.getMonth()});
+          }}
+            style={{margin:'16px auto',display:'block',color:'var(--accent-light)',fontSize:'14px',fontWeight:600}}>
+            Today
+          </button>
+        </div>
+      )}
+
+      {/* Day Detail Modal */}
+      {selectedDay && (
+        <DayDetailModal
+          dateStr={selectedDay}
+          habits={habits}
+          completions={selectedCompletions}
+          moodData={selectedMoods}
+          onClose={() => setSelectedDay(null)}
+        />
+      )}
+
+      <div style={{height:80}} />
+    </div>
+  );
+});
+
+/* =================================================================
+   STATS TAB
+   ================================================================= */
+
+const StatsTab = memo(function StatsTab() {
+  const app = useApp();
+  const { habits, allCompletions, streaks, gamification, allMoods } = app;
+  const [chartRange, setChartRange] = useState(30);
+  const [expandedHabit, setExpandedHabit] = useState(null);
+  const [statsSection, setStatsSection] = useState('overview');
+  const today = getToday();
+
+  // Completion trend data
+  const trendData = useMemo(() => {
+    const data = [];
+    for (let i = chartRange - 1; i >= 0; i--) {
+      const dateStr = addDays(today, -i);
+      const monthKey = getMonthKey(dateStr);
+      const dayComps = allCompletions[monthKey]?.[dateStr] || {};
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+      const pct = scheduled.length > 0 ? Math.round((completed.length / scheduled.length) * 100) : 0;
+      data.push({
+        date: dateStr,
+        label: dateStr.substring(5),
+        pct,
+        completed: completed.length,
+        total: scheduled.length
+      });
+    }
+    return data;
+  }, [habits, allCompletions, chartRange, today]);
+
+  // Day of week performance
+  const dowPerformance = useMemo(() => {
+    const totals = Array(7).fill(0).map(() => ({scheduled:0, completed:0}));
+    for (let i = 0; i < 90; i++) {
+      const dateStr = addDays(today, -i);
+      const dow = getDayOfWeek(dateStr);
+      const monthKey = getMonthKey(dateStr);
+      const dayComps = allCompletions[monthKey]?.[dateStr] || {};
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+      totals[dow].scheduled += scheduled.length;
+      totals[dow].completed += completed.length;
+    }
+    return DAY_NAMES.map((name, i) => ({
+      day: name,
+      pct: totals[i].scheduled > 0 ? Math.round((totals[i].completed / totals[i].scheduled) * 100) : 0
+    }));
+  }, [habits, allCompletions, today]);
+
+  // Lifetime stats
+  const lifetimeStats = useMemo(() => {
+    let totalCompleted = 0;
+    let bestStreak = 0, bestStreakHabit = '';
+    let longestEver = 0, longestEverHabit = '';
+
+    Object.entries(streaks).forEach(([hid, s]) => {
+      const habit = habits.find(h => h.id === hid);
+      if (s.current > bestStreak) { bestStreak = s.current; bestStreakHabit = habit?.name || ''; }
+      if (s.longest > longestEver) { longestEver = s.longest; longestEverHabit = habit?.name || ''; }
+    });
+
+    Object.values(allCompletions).forEach(monthData => {
+      Object.values(monthData).forEach(dayData => {
+        Object.values(dayData).forEach(comp => {
+          if (comp.completed) totalCompleted++;
+        });
+      });
+    });
+
+    // Consistency score (last 30 days)
+    let totalPct = 0, validDays = 0;
+    for (let i = 0; i < 30; i++) {
+      const dateStr = addDays(today, -i);
+      const monthKey = getMonthKey(dateStr);
+      const dayComps = allCompletions[monthKey]?.[dateStr] || {};
+      const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+      const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+      if (scheduled.length > 0) {
+        const weight = i < 7 ? 1.5 : 1;
+        totalPct += (completed.length / scheduled.length) * weight;
+        validDays += weight;
+      }
+    }
+    const consistency = validDays > 0 ? Math.round((totalPct / validDays) * 100) : 0;
+
+    return { totalCompleted, bestStreak, bestStreakHabit, longestEver, longestEverHabit, consistency };
+  }, [habits, allCompletions, streaks, today]);
+
+  // Per-habit stats
+  const habitStats = useMemo(() => {
+    return habits.filter(h => !h.archived).map(h => {
+      const streak = streaks[h.id] || {current:0,longest:0};
+      let totalDone = 0, scheduled30 = 0, completed30 = 0;
+      const sparkline = [];
+
+      for (let i = 29; i >= 0; i--) {
+        const dateStr = addDays(today, -i);
+        const monthKey = getMonthKey(dateStr);
+        const comp = allCompletions[monthKey]?.[dateStr]?.[h.id];
+        const isScheduled = isHabitScheduledOnDate(h, dateStr);
+        if (isScheduled) {
+          scheduled30++;
+          if (comp?.completed) { completed30++; totalDone++; }
+        }
+        sparkline.push({day:30-i, done:comp?.completed?1:0});
+      }
+
+      // Count older completions
+      Object.values(allCompletions).forEach(monthData => {
+        Object.values(monthData).forEach(dayData => {
+          if (dayData[h.id]?.completed) totalDone++;
+        });
+      });
+
+      const rate = scheduled30 > 0 ? Math.round((completed30/scheduled30)*100) : 0;
+      return { ...h, streak, totalDone, rate, sparkline };
+    }).sort((a,b) => b.rate - a.rate);
+  }, [habits, allCompletions, streaks, today]);
+
+  // Correlations
+  const correlations = useMemo(() => {
+    const activeHabits = habits.filter(h => !h.archived);
+    const results = [];
+    if (activeHabits.length < 2) return results;
+
+    for (let i = 0; i < activeHabits.length && i < 5; i++) {
+      for (let j = i + 1; j < activeHabits.length && j < 5; j++) {
+        const a = activeHabits[i], b = activeHabits[j];
+        let bothScheduled = 0, aAndB = 0, notAAndB = 0, aNotB = 0;
+
+        for (let d = 0; d < 60; d++) {
+          const dateStr = addDays(today, -d);
+          const mk = getMonthKey(dateStr);
+          const dayComps = allCompletions[mk]?.[dateStr] || {};
+          const aScheduled = isHabitScheduledOnDate(a, dateStr);
+          const bScheduled = isHabitScheduledOnDate(b, dateStr);
+          if (aScheduled && bScheduled) {
+            bothScheduled++;
+            const aDone = dayComps[a.id]?.completed;
+            const bDone = dayComps[b.id]?.completed;
+            if (aDone && bDone) aAndB++;
+            if (!aDone && bDone) notAAndB++;
+            if (aDone && !bDone) aNotB++;
+          }
+        }
+        if (bothScheduled >= 10) {
+          const aDoneCount = aAndB + aNotB;
+          const aNotDoneCount = bothScheduled - aDoneCount;
+          const rateWithA = aDoneCount > 0 ? (aAndB / aDoneCount) * 100 : 0;
+          const rateWithoutA = aNotDoneCount > 0 ? (notAAndB / aNotDoneCount) * 100 : 0;
+          const diff = Math.round(rateWithA - rateWithoutA);
+          if (Math.abs(diff) > 20) {
+            results.push({
+              habitA: a.name, emojiA: a.emoji,
+              habitB: b.name, emojiB: b.emoji,
+              diff, positive: diff > 0
+            });
+          }
+        }
+      }
+    }
+    return results.slice(0, 5);
+  }, [habits, allCompletions, today]);
+
+  // Mood trend
+  const moodTrend = useMemo(() => {
+    const data = [];
+    for (let i = 29; i >= 0; i--) {
+      const dateStr = addDays(today, -i);
+      const mk = getMonthKey(dateStr);
+      const mood = allMoods[mk]?.[dateStr];
+      if (mood) {
+        data.push({date: dateStr.substring(5), mood: mood.mood, energy: mood.energy || 0});
+      }
+    }
+    return data;
+  }, [allMoods, today]);
+
+  const levelInfo = getLevelInfo(gamification?.xp || 0);
+  const badges = gamification?.badges || [];
+
+  const sectionBtns = [
+    {id:'overview',label:'Overview'},
+    {id:'habits',label:'Habits'},
+    {id:'gamification',label:'Rewards'},
+    {id:'mood',label:'Mood'}
+  ];
+
+  return (
+    <div style={{padding:'0 16px',paddingTop:'calc(var(--safe-top) + 16px)'}}>
+      <div style={{fontSize:'22px',fontWeight:700,marginBottom:16}}>Statistics</div>
+
+      {/* Section Tabs */}
+      <div className="scroll-h" style={{marginBottom:20}}>
+        {sectionBtns.map(s => (
+          <button key={s.id} className={`chip ${statsSection===s.id?'active':''}`}
+            onClick={() => setStatsSection(s.id)}>{s.label}</button>
+        ))}
+      </div>
+
+      {/* OVERVIEW SECTION */}
+      {statsSection === 'overview' && (
+        <div className="fade-in">
+          {/* Overview Cards */}
+          <div className="scroll-h" style={{marginBottom:20}}>
+            <div className="stat-card">
+              <div className="stat-value">{lifetimeStats.totalCompleted}</div>
+              <div className="stat-label">Total Completed</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">🔥 {lifetimeStats.bestStreak}</div>
+              <div className="stat-label">Current Best</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">💎 {lifetimeStats.longestEver}</div>
+              <div className="stat-label">Longest Ever</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-value">{lifetimeStats.consistency}</div>
+              <div className="stat-label">Consistency Score</div>
+            </div>
+          </div>
+
+          {/* Completion Trend Chart */}
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
+              <div style={{fontSize:'15px',fontWeight:600}}>Completion Rate</div>
+              <div style={{display:'flex',gap:4}}>
+                {[7,30,90].map(r => (
+                  <button key={r} className={`chip ${chartRange===r?'active':''}`}
+                    onClick={() => setChartRange(r)} style={{padding:'3px 8px',fontSize:'11px'}}>{r}d</button>
+                ))}
+              </div>
+            </div>
+            <div style={{width:'100%',height:180}}>
+              <ResponsiveContainer>
+                <AreaChart data={trendData} margin={{top:5,right:5,left:-20,bottom:0}}>
+                  <defs>
+                    <linearGradient id="colorPct" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <XAxis dataKey="label" tick={{fill:'#64748b',fontSize:10}} axisLine={false} tickLine={false}
+                    interval={Math.floor(trendData.length/5)} />
+                  <YAxis tick={{fill:'#64748b',fontSize:10}} axisLine={false} tickLine={false}
+                    domain={[0,100]} />
+                  <Tooltip contentStyle={{background:'#1e293b',border:'1px solid #334155',borderRadius:8,fontSize:12}}
+                    labelStyle={{color:'#94a3b8'}} />
+                  <Area type="monotone" dataKey="pct" stroke="#6366f1" strokeWidth={2}
+                    fill="url(#colorPct)" dot={false} name="Completion %" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Day of Week */}
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{fontSize:'15px',fontWeight:600,marginBottom:12}}>Day of Week Performance</div>
+            <div style={{width:'100%',height:180}}>
+              <ResponsiveContainer>
+                <BarChart data={dowPerformance} margin={{top:5,right:5,left:-20,bottom:0}}>
+                  <XAxis dataKey="day" tick={{fill:'#64748b',fontSize:11}} axisLine={false} tickLine={false} />
+                  <YAxis tick={{fill:'#64748b',fontSize:10}} axisLine={false} tickLine={false} domain={[0,100]} />
+                  <Tooltip contentStyle={{background:'#1e293b',border:'1px solid #334155',borderRadius:8,fontSize:12}} />
+                  <Bar dataKey="pct" radius={[6,6,0,0]} name="Completion %">
+                    {dowPerformance.map((entry, i) => (
+                      <Cell key={i} fill={entry.pct >= 80 ? '#22c55e' : entry.pct >= 50 ? '#6366f1' : '#ef4444'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+            {(() => {
+              const best = dowPerformance.reduce((a,b) => a.pct > b.pct ? a : b, dowPerformance[0]);
+              const worst = dowPerformance.reduce((a,b) => a.pct < b.pct ? a : b, dowPerformance[0]);
+              return (
+                <div style={{fontSize:'12px',color:'var(--text-muted)',marginTop:8}}>
+                  Strongest: {best.day} ({best.pct}%) · Weakest: {worst.day} ({worst.pct}%)
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Correlations */}
+          {correlations.length > 0 && (
+            <div style={{marginBottom:16}}>
+              <div className="section-header">Insights</div>
+              {correlations.map((c, i) => (
+                <div key={i} className="card" style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:'20px'}}>{c.emojiA}</span>
+                  <div style={{flex:1,fontSize:'13px'}}>
+                    You complete <b>{c.habitB}</b> {Math.abs(c.diff)}% {c.positive ? 'more' : 'less'} on days you complete <b>{c.habitA}</b>
+                  </div>
+                  <span style={{fontSize:'20px'}}>{c.emojiB}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Personal Records */}
+          <div className="card">
+            <div style={{fontSize:'15px',fontWeight:600,marginBottom:12}}>Personal Records</div>
+            <div style={{display:'flex',flexDirection:'column',gap:8}}>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'13px'}}>
+                <span>🏆 Longest streak ever</span>
+                <span style={{fontWeight:600}}>{lifetimeStats.longestEver} days {lifetimeStats.longestEverHabit ? `(${lifetimeStats.longestEverHabit})` : ''}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'13px'}}>
+                <span>✅ Total completions</span>
+                <span style={{fontWeight:600}}>{lifetimeStats.totalCompleted}</span>
+              </div>
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'13px'}}>
+                <span>📊 Consistency</span>
+                <span style={{fontWeight:600}}>{lifetimeStats.consistency}%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* HABITS SECTION */}
+      {statsSection === 'habits' && (
+        <div className="fade-in">
+          {habitStats.map(h => (
+            <div key={h.id}>
+              <div className="card" onClick={() => setExpandedHabit(expandedHabit === h.id ? null : h.id)}
+                style={{cursor:'pointer'}}>
+                <div style={{display:'flex',alignItems:'center',gap:10}}>
+                  <span style={{fontSize:'24px'}}>{h.emoji}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:'14px',fontWeight:600}}>{h.name}</div>
+                    <div style={{display:'flex',gap:12,fontSize:'12px',color:'var(--text-muted)',marginTop:2}}>
+                      <span>🔥 {h.streak.current}</span>
+                      <span>💎 {h.streak.longest}</span>
+                      <span>{h.rate}%</span>
+                    </div>
+                  </div>
+                  {/* Mini sparkline */}
+                  <div style={{width:60,height:24}}>
+                    <ResponsiveContainer>
+                      <AreaChart data={h.sparkline} margin={{top:0,right:0,left:0,bottom:0}}>
+                        <Area type="monotone" dataKey="done" stroke={getCategoryColor(h.category)}
+                          fill={getCategoryColor(h.category)} fillOpacity={0.3} strokeWidth={1.5} dot={false} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <span style={{fontSize:'16px',color:'var(--text-muted)'}}>{expandedHabit===h.id?'▼':'▶'}</span>
+                </div>
+              </div>
+
+              {expandedHabit === h.id && (
+                <div className="card fade-in" style={{marginTop:-4,borderTopLeftRadius:0,borderTopRightRadius:0}}>
+                  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12,marginBottom:12}}>
+                    <div><span style={{fontSize:'12px',color:'var(--text-muted)'}}>Current Streak</span>
+                      <div style={{fontSize:'18px',fontWeight:700}}>🔥 {h.streak.current}</div></div>
+                    <div><span style={{fontSize:'12px',color:'var(--text-muted)'}}>Longest Streak</span>
+                      <div style={{fontSize:'18px',fontWeight:700}}>💎 {h.streak.longest}</div></div>
+                    <div><span style={{fontSize:'12px',color:'var(--text-muted)'}}>Completion Rate</span>
+                      <div style={{fontSize:'18px',fontWeight:700}}>{h.rate}%</div></div>
+                    <div><span style={{fontSize:'12px',color:'var(--text-muted)'}}>Total Done</span>
+                      <div style={{fontSize:'18px',fontWeight:700}}>{h.totalDone}</div></div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* GAMIFICATION SECTION */}
+      {statsSection === 'gamification' && (
+        <div className="fade-in">
+          {/* Level & XP */}
+          <div className="card" style={{marginBottom:16,textAlign:'center'}}>
+            <div style={{fontSize:'48px',marginBottom:8}}>{levelInfo.icon}</div>
+            <div style={{fontSize:'20px',fontWeight:700}}>Level {levelInfo.level}: {levelInfo.name}</div>
+            <div style={{fontSize:'14px',color:'var(--text-muted)',marginBottom:12}}>
+              {gamification?.xp || 0} XP Total
+            </div>
+            {levelInfo.next && (
+              <>
+                <div style={{background:'var(--bg-tertiary)',borderRadius:8,height:12,overflow:'hidden',marginBottom:8}}>
+                  <div style={{height:'100%',borderRadius:8,background:'linear-gradient(90deg,var(--accent),var(--accent-light))',
+                    width:Math.round((levelInfo.xpProgress/levelInfo.xpForNext)*100)+'%',
+                    transition:'width 0.5s'}} />
+                </div>
+                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>
+                  {levelInfo.xpProgress} / {levelInfo.xpForNext} XP to Level {levelInfo.next.level}
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* Badges */}
+          <div className="section-header">Badges</div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:20}}>
+            {BADGES.map(b => {
+              const unlocked = badges.find(ub => ub.id === b.id);
+              return (
+                <div key={b.id} className="badge-item">
+                  <span className={`badge-icon ${unlocked ? '' : 'locked'}`}>{b.icon}</span>
+                  <span className="badge-name">{unlocked ? b.name : '???'}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Challenges */}
+          <div className="section-header">Daily Challenge</div>
+          <div className="card" style={{marginBottom:16}}>
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:'28px'}}>⚡</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'14px',fontWeight:600}}>Complete all habits before noon</div>
+                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>Reward: +50 XP</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="section-header">Weekly Challenge</div>
+          <div className="card">
+            <div style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:'28px'}}>🎯</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'14px',fontWeight:600}}>Don't miss a single habit this week</div>
+                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>Reward: +100 XP</div>
+                <div style={{display:'flex',gap:4,marginTop:8}}>
+                  {DAY_NAMES.map((d,i) => {
+                    const dateStr = addDays(today, -(new Date().getDay()) + i);
+                    const mk = getMonthKey(dateStr);
+                    const dayComps = allCompletions[mk]?.[dateStr] || {};
+                    const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, dateStr));
+                    const completed = scheduled.filter(h => dayComps[h.id]?.completed);
+                    const isPerfect = scheduled.length > 0 && completed.length === scheduled.length;
+                    const isPast = dateStr <= today;
+                    return (
+                      <div key={d} style={{width:28,height:28,borderRadius:14,fontSize:'10px',fontWeight:600,
+                        display:'flex',alignItems:'center',justifyContent:'center',
+                        background:isPerfect?'var(--success)':isPast?'var(--danger)':'var(--bg-tertiary)',
+                        color:isPast?'#fff':'var(--text-muted)'}}>
+                        {d.charAt(0)}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MOOD SECTION */}
+      {statsSection === 'mood' && (
+        <div className="fade-in">
+          {moodTrend.length > 0 ? (
+            <>
+              <div className="card" style={{marginBottom:16}}>
+                <div style={{fontSize:'15px',fontWeight:600,marginBottom:12}}>Mood Trend (30 days)</div>
+                <div style={{width:'100%',height:180}}>
+                  <ResponsiveContainer>
+                    <LineChart data={moodTrend} margin={{top:5,right:5,left:-20,bottom:0}}>
+                      <XAxis dataKey="date" tick={{fill:'#64748b',fontSize:10}} axisLine={false} tickLine={false} />
+                      <YAxis tick={{fill:'#64748b',fontSize:10}} axisLine={false} tickLine={false} domain={[1,5]} />
+                      <Tooltip contentStyle={{background:'#1e293b',border:'1px solid #334155',borderRadius:8,fontSize:12}} />
+                      <Line type="monotone" dataKey="mood" stroke="#ec4899" strokeWidth={2} dot={{r:3}} name="Mood" />
+                      <Line type="monotone" dataKey="energy" stroke="#06b6d4" strokeWidth={2} dot={{r:3}} name="Energy" />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="card">
+                <div style={{fontSize:'15px',fontWeight:600,marginBottom:8}}>Average Mood</div>
+                <div style={{fontSize:'32px',textAlign:'center',margin:'12px 0'}}>
+                  {MOOD_EMOJIS.find(m => m.val === Math.round(moodTrend.reduce((a,b) => a + b.mood, 0) / moodTrend.length))?.emoji || '😐'}
+                </div>
+                <div style={{textAlign:'center',fontSize:'14px',color:'var(--text-muted)'}}>
+                  {(moodTrend.reduce((a,b) => a + b.mood, 0) / moodTrend.length).toFixed(1)} / 5.0
+                </div>
+              </div>
+            </>
+          ) : (
+            <div style={{textAlign:'center',padding:'40px 20px',color:'var(--text-muted)'}}>
+              <div style={{fontSize:'48px',marginBottom:16}}>📊</div>
+              <div style={{fontSize:'16px',fontWeight:600,marginBottom:8}}>No mood data yet</div>
+              <div style={{fontSize:'14px'}}>Complete your daily mood check-in to see trends here</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div style={{height:80}} />
+    </div>
+  );
+});
+
+/* =================================================================
+   SETTINGS TAB
+   ================================================================= */
+
+const SettingsTab = memo(function SettingsTab() {
+  const app = useApp();
+  const { habits, settings, updateSettings, saveHabit, deleteHabit, showToast, loadAllData } = app;
+  const [editingHabit, setEditingHabit] = useState(null);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [deleteText, setDeleteText] = useState('');
+  const [showTemplates, setShowTemplates] = useState(false);
+  const [settingsSection, setSettingsSection] = useState('habits');
+
+  const activeHabits = habits.filter(h => !h.archived);
+  const archivedHabits = habits.filter(h => h.archived);
+
+  const handleSaveHabit = async (habitData) => {
+    await saveHabit(habitData);
+    setEditingHabit(null);
+    setShowAddModal(false);
+    showToast('Habit saved!', '✅');
+  };
+
+  const handleDeleteHabit = async (id) => {
+    await deleteHabit(id);
+    setEditingHabit(null);
+    showToast('Habit deleted', '🗑️');
+  };
+
+  const handleArchive = async (habit) => {
+    await saveHabit({...habit, archived: !habit.archived});
+    showToast(habit.archived ? 'Habit restored!' : 'Habit archived', habit.archived ? '✅' : '📦');
+  };
+
+  const handleClearData = async () => {
+    if (deleteText !== 'DELETE') return;
+    await Storage.clearAll();
+    setShowClearConfirm(false);
+    setDeleteText('');
+    window.location.reload();
+  };
+
+  const handleExport = async () => {
+    const data = {};
+    const keys = await Storage.list();
+    for (const key of keys) {
+      data[key] = await Storage.get(key);
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'habitflow-backup.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast('Data exported!', '📥');
+  };
+
+  const handleImport = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        for (const [key, value] of Object.entries(data)) {
+          await Storage.set(key, value);
+        }
+        showToast('Data imported! Reloading...', '📤');
+        setTimeout(() => window.location.reload(), 1500);
+      } catch(err) {
+        showToast('Import failed: invalid file', '❌');
+      }
+    };
+    input.click();
+  };
+
+  const handleGenerateDemo = async () => {
+    const demoHabits = [
+      {name:'Meditate',emoji:'🧘',category:'mindfulness',difficulty:'medium',timeOfDay:'morning'},
+      {name:'Exercise',emoji:'🏋️',category:'fitness',difficulty:'hard',timeOfDay:'morning'},
+      {name:'Read',emoji:'📚',category:'learning',difficulty:'medium',timeOfDay:'evening'},
+      {name:'Drink Water',emoji:'💧',category:'health',difficulty:'easy',timeOfDay:'morning',isQuantifiable:true,target:{value:8,unit:'glasses'}},
+      {name:'Journal',emoji:'✍️',category:'mindfulness',difficulty:'easy',timeOfDay:'evening'},
+      {name:'No Social Media',emoji:'📱',category:'productivity',difficulty:'hard',timeOfDay:'morning'},
+    ];
+
+    const newHabits = demoHabits.map((h, i) => ({
+      id: genId(),
+      name: h.name, emoji: h.emoji, description: '',
+      category: h.category, color: getCategoryColor(h.category),
+      frequency: {type:'daily',days:[...DAY_KEYS],timesPerWeek:7},
+      timeOfDay: h.timeOfDay,
+      isQuantifiable: h.isQuantifiable || false,
+      target: h.target || {value:1,unit:'times'},
+      difficulty: h.difficulty, xpReward: getXpReward(h.difficulty),
+      streakFreezeEnabled: true, maxFreezes: 2, restDays: [],
+      stackAfter: null, startDate: addDays(getToday(), -60), endDate: null,
+      archived: false, order: i, createdAt: new Date().toISOString()
+    }));
+
+    await Storage.set('habits', newHabits);
+
+    // Generate 60 days of completions
+    for (let d = 60; d >= 0; d--) {
+      const dateStr = addDays(getToday(), -d);
+      const mk = getMonthKey(dateStr);
+      let monthData = await Storage.get(`completions:${mk}`) || {};
+      const dayData = {};
+      newHabits.forEach(h => {
+        if (Math.random() > 0.2) {
+          dayData[h.id] = {
+            completed: true,
+            value: h.isQuantifiable ? h.target.value : 1,
+            timestamp: new Date().toISOString()
+          };
+        }
+      });
+      monthData[dateStr] = dayData;
+      await Storage.set(`completions:${mk}`, monthData);
+    }
+
+    // Generate mood data
+    for (let d = 30; d >= 0; d--) {
+      const dateStr = addDays(getToday(), -d);
+      const mk = getMonthKey(dateStr);
+      let moodMonth = await Storage.get(`mood:${mk}`) || {};
+      moodMonth[dateStr] = {
+        mood: Math.floor(Math.random() * 3) + 3,
+        energy: Math.floor(Math.random() * 3) + 3,
+        tags: [], note: '', timestamp: new Date().toISOString()
+      };
+      await Storage.set(`mood:${mk}`, moodMonth);
+    }
+
+    await Storage.set('gamification', {xp: 1250, level: 5, badges: [
+      {id:'first_step',unlockedAt:new Date().toISOString()},
+      {id:'perfect_day',unlockedAt:new Date().toISOString()},
+      {id:'on_fire',unlockedAt:new Date().toISOString()}
+    ], challenges: {}});
+
+    showToast('Demo data generated! Reloading...', '🎮');
+    setTimeout(() => window.location.reload(), 1500);
+  };
+
+  const addFromTemplate = async (templateKey) => {
+    const template = HABIT_TEMPLATES[templateKey];
+    if (!template) return;
+    const newHabits = template.habits.map((h, i) => ({
+      id: genId(), name: h.name, emoji: h.emoji, description: '',
+      category: h.category, color: getCategoryColor(h.category),
+      frequency: {type:'daily',days:[...DAY_KEYS],timesPerWeek:7},
+      timeOfDay: i < 3 ? 'morning' : i < 5 ? 'afternoon' : 'evening',
+      isQuantifiable: h.isQuantifiable || false, target: h.target || {value:1,unit:'times'},
+      difficulty: h.difficulty, xpReward: getXpReward(h.difficulty),
+      streakFreezeEnabled: true, maxFreezes: 2, restDays: [],
+      stackAfter: null, startDate: getToday(), endDate: null,
+      archived: false, order: habits.length + i, createdAt: new Date().toISOString()
+    }));
+
+    for (const h of newHabits) await saveHabit(h);
+    setShowTemplates(false);
+    showToast(`Added ${newHabits.length} habits from ${template.name}`, '✅');
+  };
+
+  const sectionBtns = [
+    {id:'habits',label:'Habits'},
+    {id:'templates',label:'Templates'},
+    {id:'appearance',label:'Settings'},
+    {id:'data',label:'Data'},
+    {id:'about',label:'About'}
+  ];
+
+  return (
+    <div style={{padding:'0 16px',paddingTop:'calc(var(--safe-top) + 16px)'}}>
+      <div style={{fontSize:'22px',fontWeight:700,marginBottom:16}}>Settings</div>
+
+      <div className="scroll-h" style={{marginBottom:20}}>
+        {sectionBtns.map(s => (
+          <button key={s.id} className={`chip ${settingsSection===s.id?'active':''}`}
+            onClick={() => setSettingsSection(s.id)}>{s.label}</button>
+        ))}
+      </div>
+
+      {/* HABITS MANAGEMENT */}
+      {settingsSection === 'habits' && (
+        <div className="fade-in">
+          <button className="btn-primary" style={{marginBottom:16}} onClick={() => setShowAddModal(true)}>
+            + Add New Habit
+          </button>
+
+          <div className="section-header">Active Habits ({activeHabits.length})</div>
+          {activeHabits.map(h => (
+            <div key={h.id} className="card" style={{display:'flex',alignItems:'center',gap:10}}>
+              <span style={{fontSize:'24px'}}>{h.emoji}</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:'14px',fontWeight:600}}>{h.name}</div>
+                <div style={{fontSize:'12px',color:'var(--text-muted)',textTransform:'capitalize'}}>{h.category}</div>
+              </div>
+              <button onClick={() => setEditingHabit(h)}
+                style={{padding:'6px 12px',borderRadius:8,background:'var(--bg-tertiary)',fontSize:'12px',color:'var(--text-secondary)'}}>Edit</button>
+              <button onClick={() => handleArchive(h)}
+                style={{padding:'6px 12px',borderRadius:8,background:'var(--bg-tertiary)',fontSize:'12px',color:'var(--warning)'}}>Archive</button>
+            </div>
+          ))}
+
+          {archivedHabits.length > 0 && (
+            <>
+              <button onClick={() => setShowArchived(!showArchived)}
+                style={{padding:'12px 0',color:'var(--text-muted)',fontSize:'14px',width:'100%',textAlign:'left'}}>
+                {showArchived ? '▼' : '▶'} Archived ({archivedHabits.length})
+              </button>
+              {showArchived && archivedHabits.map(h => (
+                <div key={h.id} className="card" style={{display:'flex',alignItems:'center',gap:10,opacity:0.6}}>
+                  <span style={{fontSize:'24px'}}>{h.emoji}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:'14px',fontWeight:600}}>{h.name}</div>
+                  </div>
+                  <button onClick={() => handleArchive(h)}
+                    style={{padding:'6px 12px',borderRadius:8,background:'var(--bg-tertiary)',fontSize:'12px',color:'var(--success)'}}>Restore</button>
+                  <button onClick={() => handleDeleteHabit(h.id)}
+                    style={{padding:'6px 12px',borderRadius:8,background:'var(--bg-tertiary)',fontSize:'12px',color:'var(--danger)'}}>Delete</button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* TEMPLATES */}
+      {settingsSection === 'templates' && (
+        <div className="fade-in">
+          <div style={{fontSize:'14px',color:'var(--text-muted)',marginBottom:16}}>Quick-start habit packs</div>
+          {Object.entries(HABIT_TEMPLATES).map(([key, template]) => (
+            <div key={key} className="card">
+              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+                <div style={{fontSize:'16px',fontWeight:600}}>{template.name}</div>
+                <button className="chip active" onClick={() => addFromTemplate(key)}>Add All</button>
+              </div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+                {template.habits.map(h => (
+                  <span key={h.name} className="chip" style={{fontSize:'12px'}}>{h.emoji} {h.name}</span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* APP SETTINGS */}
+      {settingsSection === 'appearance' && (
+        <div className="fade-in">
+          <div className="section-header">General</div>
+          <div className="card">
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'8px 0'}}>
+              <div>
+                <div style={{fontSize:'14px',fontWeight:600}}>Mood Tracking</div>
+                <div style={{fontSize:'12px',color:'var(--text-muted)'}}>Daily mood check-in</div>
+              </div>
+              <Toggle value={settings.moodEnabled !== false}
+                onChange={v => updateSettings({moodEnabled:v})} />
+            </div>
+          </div>
+
+          <div className="section-header">Week Start</div>
+          <div className="card">
+            <div style={{display:'flex',gap:8}}>
+              {['Sunday','Monday'].map(d => (
+                <button key={d} className={`chip ${(settings.weekStart||'Sunday')===d?'active':''}`}
+                  onClick={() => updateSettings({weekStart:d})}>{d}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DATA MANAGEMENT */}
+      {settingsSection === 'data' && (
+        <div className="fade-in">
+          <div className="card" style={{display:'flex',flexDirection:'column',gap:10}}>
+            <button className="btn-secondary" style={{width:'100%'}} onClick={handleExport}>📥 Export Data (JSON)</button>
+            <button className="btn-secondary" style={{width:'100%'}} onClick={handleImport}>📤 Import Data</button>
+            <button className="btn-secondary" style={{width:'100%'}} onClick={handleGenerateDemo}>🎮 Generate Demo Data</button>
+          </div>
+
+          <div style={{marginTop:20}}>
+            {!showClearConfirm ? (
+              <button className="btn-danger" style={{width:'100%'}} onClick={() => setShowClearConfirm(true)}>
+                🗑️ Clear All Data
+              </button>
+            ) : (
+              <div className="card" style={{border:'1px solid var(--danger)'}}>
+                <div style={{fontSize:'14px',fontWeight:600,color:'var(--danger)',marginBottom:8}}>
+                  This cannot be undone!
+                </div>
+                <div style={{fontSize:'13px',color:'var(--text-muted)',marginBottom:12}}>
+                  Type DELETE to confirm
+                </div>
+                <input className="input" value={deleteText} onChange={e => setDeleteText(e.target.value)}
+                  placeholder="Type DELETE" style={{marginBottom:10}} />
+                <div style={{display:'flex',gap:8}}>
+                  <button className="btn-danger" style={{flex:1,opacity:deleteText==='DELETE'?1:0.5}}
+                    onClick={handleClearData} disabled={deleteText!=='DELETE'}>Confirm Delete</button>
+                  <button className="btn-secondary" style={{flex:1}}
+                    onClick={() => {setShowClearConfirm(false);setDeleteText('');}}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ABOUT */}
+      {settingsSection === 'about' && (
+        <div className="fade-in" style={{textAlign:'center',padding:'20px 0'}}>
+          <div style={{fontSize:'64px',marginBottom:16}}>🌊</div>
+          <div style={{fontSize:'24px',fontWeight:700,marginBottom:4}}>HabitFlow</div>
+          <div style={{color:'var(--text-muted)',marginBottom:24}}>Version 1.0.0</div>
+          <div style={{color:'var(--text-secondary)',marginBottom:24}}>Made with ❤️</div>
+
+          <div className="card" style={{textAlign:'left'}}>
+            <div style={{fontSize:'15px',fontWeight:600,marginBottom:8}}>Install on Home Screen</div>
+            <div style={{fontSize:'13px',color:'var(--text-secondary)',lineHeight:1.6}}>
+              1. Tap the Share button (📤) in Safari<br/>
+              2. Scroll down and tap "Add to Home Screen"<br/>
+              3. Tap "Add" to confirm<br/>
+              4. Open from your home screen for the full experience!
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingHabit && (
+        <HabitModal habit={editingHabit} onSave={handleSaveHabit}
+          onDelete={handleDeleteHabit} onClose={() => setEditingHabit(null)} />
+      )}
+
+      {/* Add Modal */}
+      {showAddModal && (
+        <HabitModal onSave={handleSaveHabit} onClose={() => setShowAddModal(false)} />
+      )}
+
+      <div style={{height:80}} />
+    </div>
+  );
+});
+
+/* =================================================================
+   MAIN APP
+   ================================================================= */
+
+function App() {
+  const [loading, setLoading] = useState(true);
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [activeTab, setActiveTab] = useState('today');
+  const [habits, setHabits] = useState([]);
+  const [todayCompletions, setTodayCompletions] = useState({});
+  const [allCompletions, setAllCompletions] = useState({});
+  const [allMoods, setAllMoods] = useState({});
+  const [streaks, setStreaks] = useState({});
+  const [gamification, setGamification] = useState({xp:0,level:1,badges:[],challenges:{}});
+  const [settings, setSettings] = useState({moodEnabled:true,weekStart:'Monday'});
+  const [toasts, setToasts] = useState([]);
+  const [showConfetti, setShowConfetti] = useState(false);
+  const [showMoodModal, setShowMoodModal] = useState(false);
+  const [showAddHabit, setShowAddHabit] = useState(false);
+  const [todayStr, setTodayStr] = useState(getToday());
+
+  const debounceTimers = useRef({});
+
+  // Debounced storage write
+  const debouncedSet = useCallback((key, value, delay = 500) => {
+    if (debounceTimers.current[key]) clearTimeout(debounceTimers.current[key]);
+    debounceTimers.current[key] = setTimeout(() => {
+      Storage.set(key, value);
+    }, delay);
+  }, []);
+
+  const showToast = useCallback((message, icon, undoAction, duration) => {
+    const id = ++toastIdCounter;
+    setToasts(prev => [...prev.slice(-2), {id, message, icon, undoAction, duration: duration || 3000}]);
+  }, []);
+
+  const removeToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const triggerConfetti = useCallback(() => {
+    setShowConfetti(true);
+  }, []);
+
+  // Load all data
+  const loadAllData = useCallback(async () => {
+    try {
+      const onboarding = await Storage.get('onboarding');
+      if (!onboarding?.completed) {
+        setShowOnboarding(true);
+        setLoading(false);
+        return;
+      }
+
+      const [h, s, g, st] = await Promise.all([
+        Storage.get('habits'),
+        Storage.get('settings'),
+        Storage.get('gamification'),
+        Storage.get('streaks')
+      ]);
+
+      setHabits(h || []);
+      setSettings(s || {moodEnabled:true,weekStart:'Monday'});
+      setGamification(g || {xp:0,level:1,badges:[],challenges:{}});
+      setStreaks(st || {});
+
+      // Load completions for current and last 12 months
+      const today = getToday();
+      const comps = {};
+      const moods = {};
+      const now = new Date();
+      for (let i = 0; i < 13; i++) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const mk = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+        const [c, m] = await Promise.all([
+          Storage.get(`completions:${mk}`),
+          Storage.get(`mood:${mk}`)
+        ]);
+        if (c) comps[mk] = c;
+        if (m) moods[mk] = m;
+      }
+      setAllCompletions(comps);
+      setAllMoods(moods);
+
+      const todayMk = getMonthKey(today);
+      setTodayCompletions(comps[todayMk]?.[today] || {});
+
+      // Check if mood check-in needed
+      if ((s || settings).moodEnabled !== false) {
+        const todayMood = moods[todayMk]?.[today];
+        if (!todayMood && (h || []).length > 0) {
+          setTimeout(() => setShowMoodModal(true), 2000);
+        }
+      }
+
+      setLoading(false);
+    } catch(e) {
+      console.error('Load error:', e);
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadAllData(); }, [loadAllData]);
+
+  // Check for day change
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const newToday = getToday();
+      if (newToday !== todayStr) {
+        setTodayStr(newToday);
+        loadAllData();
+      }
+    }, 60000);
+    return () => clearInterval(interval);
+  }, [todayStr, loadAllData]);
+
+  // Calculate streaks for all habits
+  const recalcStreaks = useCallback(async (habitsArr, completionsData) => {
+    const newStreaks = {};
+    const today = getToday();
+
+    for (const habit of habitsArr) {
+      if (habit.archived) continue;
+      let current = 0;
+      let checking = true;
+      let day = today;
+      let freezesUsed = 0;
+
+      while (checking) {
+        const mk = getMonthKey(day);
+        const dayComps = completionsData[mk]?.[day];
+        const isScheduled = isHabitScheduledOnDate(habit, day);
+
+        if (!isScheduled) {
+          // Not scheduled, skip this day
+        } else if (dayComps?.[habit.id]?.completed) {
+          current++;
+        } else if (habit.streakFreezeEnabled && freezesUsed < (habit.maxFreezes || 2) && day !== today) {
+          freezesUsed++;
+          current++;
+        } else if (day === today) {
+          // Today hasn't been completed yet, don't break streak
+        } else {
+          checking = false;
+        }
+
+        day = addDays(day, -1);
+        if (daysBetween(day, today) > 400) checking = false;
+      }
+
+      const prev = streaks[habit.id] || {current:0, longest:0, freezesUsed:0};
+      newStreaks[habit.id] = {
+        current,
+        longest: Math.max(current, prev.longest),
+        freezesUsed
+      };
+    }
+
+    setStreaks(newStreaks);
+    debouncedSet('streaks', newStreaks);
+    return newStreaks;
+  }, [streaks, debouncedSet]);
+
+  // Complete habit
+  const completeHabit = useCallback(async (habitId, completed, value) => {
+    const today = getToday();
+    const mk = getMonthKey(today);
+
+    setTodayCompletions(prev => {
+      const next = {...prev};
+      if (completed) {
+        next[habitId] = {
+          ...(next[habitId] || {}),
+          completed: true,
+          value: value || (next[habitId]?.value || 1),
+          timestamp: new Date().toISOString(),
+          skipped: false
+        };
+      } else {
+        next[habitId] = {...(next[habitId] || {}), completed: false};
+      }
+
+      // Persist
+      setAllCompletions(ac => {
+        const newAc = {...ac};
+        if (!newAc[mk]) newAc[mk] = {};
+        newAc[mk] = {...newAc[mk], [today]: next};
+        debouncedSet(`completions:${mk}`, newAc[mk]);
+        // Recalc streaks
+        setTimeout(() => recalcStreaks(habits, newAc), 100);
+        return newAc;
+      });
+
+      return next;
+    });
+
+    if (completed) {
+      const habit = habits.find(h => h.id === habitId);
+      if (habit) {
+        // Award XP
+        const streak = streaks[habitId]?.current || 0;
+        const baseXP = getXpReward(habit.difficulty);
+        const streakBonus = Math.min(streak, 20);
+        let xpGain = baseXP + streakBonus;
+
+        setGamification(prev => {
+          const newG = {...prev, xp: (prev.xp || 0) + xpGain};
+          newG.level = getLevelInfo(newG.xp).level;
+
+          // Check badges
+          const badges = [...(newG.badges || [])];
+          const hasBadge = (id) => badges.some(b => b.id === id);
+
+          if (!hasBadge('first_step')) {
+            badges.push({id:'first_step',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: First Step! 🌱', '🏆');
+            triggerConfetti();
+          }
+
+          // Check streak-based badges
+          const newStreak = (streaks[habitId]?.current || 0) + 1;
+          if (newStreak >= 7 && !hasBadge('on_fire')) {
+            badges.push({id:'on_fire',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: On Fire! 🔥', '🏆');
+            triggerConfetti();
+          }
+          if (newStreak >= 30 && !hasBadge('iron_streak')) {
+            badges.push({id:'iron_streak',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Iron Streak! 💪', '🏆');
+            triggerConfetti();
+          }
+          if (newStreak >= 100 && !hasBadge('diamond_streak')) {
+            badges.push({id:'diamond_streak',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Diamond Streak! 💎', '🏆');
+            triggerConfetti();
+          }
+
+          // Check category badges
+          if (habit.category === 'mindfulness' && newStreak >= 50 && !hasBadge('zen_master')) {
+            badges.push({id:'zen_master',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Zen Master! 🧘', '🏆');
+          }
+          if (habit.category === 'learning' && newStreak >= 50 && !hasBadge('bookworm')) {
+            badges.push({id:'bookworm',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Bookworm! 📖', '🏆');
+          }
+          if (habit.category === 'fitness' && newStreak >= 50 && !hasBadge('athlete')) {
+            badges.push({id:'athlete',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Athlete! 🏃', '🏆');
+          }
+
+          // Habit collector
+          if (habits.filter(h => !h.archived).length >= 10 && !hasBadge('habit_collector')) {
+            badges.push({id:'habit_collector',unlockedAt:new Date().toISOString()});
+            showToast('Badge unlocked: Habit Collector! 📚', '🏆');
+          }
+
+          newG.badges = badges;
+          debouncedSet('gamification', newG);
+          return newG;
+        });
+
+        // Check for perfect day
+        setTimeout(() => {
+          setTodayCompletions(tc => {
+            const scheduled = habits.filter(h => !h.archived && isHabitScheduledOnDate(h, today));
+            const allDone = scheduled.length > 0 && scheduled.every(h => tc[h.id]?.completed);
+            if (allDone) {
+              triggerConfetti();
+              showToast('Perfect day! +25 XP 🎉', '🎉');
+              setGamification(prev => {
+                const newG = {...prev, xp: prev.xp + 25};
+                const badges = [...(newG.badges || [])];
+                if (!badges.some(b => b.id === 'perfect_day')) {
+                  badges.push({id:'perfect_day',unlockedAt:new Date().toISOString()});
+                  showToast('Badge unlocked: Perfect Day! ✅', '🏆');
+                }
+                newG.badges = badges;
+                newG.level = getLevelInfo(newG.xp).level;
+                debouncedSet('gamification', newG);
+                return newG;
+              });
+            }
+            return tc;
+          });
+        }, 300);
+      }
+
+      showToast('Habit completed!', '✅');
+    }
+  }, [habits, streaks, debouncedSet, showToast, triggerConfetti, recalcStreaks]);
+
+  // Skip habit
+  const skipHabit = useCallback(async (habitId, reason) => {
+    const today = getToday();
+    const mk = getMonthKey(today);
+
+    setTodayCompletions(prev => {
+      const next = {...prev};
+      next[habitId] = {...(next[habitId]||{}), skipped: true, skipReason: reason, completed: false};
+
+      setAllCompletions(ac => {
+        const newAc = {...ac};
+        if (!newAc[mk]) newAc[mk] = {};
+        newAc[mk] = {...newAc[mk], [today]: next};
+        debouncedSet(`completions:${mk}`, newAc[mk]);
+        return newAc;
+      });
+
+      return next;
+    });
+
+    showToast(`Skipped: ${reason}`, '⏭️');
+  }, [debouncedSet, showToast]);
+
+  // Set quantity value
+  const setQtyValue = useCallback(async (habitId, value) => {
+    const today = getToday();
+    const mk = getMonthKey(today);
+
+    setTodayCompletions(prev => {
+      const next = {...prev};
+      next[habitId] = {...(next[habitId]||{}), value};
+
+      setAllCompletions(ac => {
+        const newAc = {...ac};
+        if (!newAc[mk]) newAc[mk] = {};
+        newAc[mk] = {...newAc[mk], [today]: next};
+        debouncedSet(`completions:${mk}`, newAc[mk]);
+        return newAc;
+      });
+
+      return next;
+    });
+  }, [debouncedSet]);
+
+  // Save habit
+  const saveHabit = useCallback(async (habitData) => {
+    setHabits(prev => {
+      const idx = prev.findIndex(h => h.id === habitData.id);
+      const next = idx >= 0 ? [...prev.slice(0,idx), habitData, ...prev.slice(idx+1)] : [...prev, habitData];
+      debouncedSet('habits', next, 200);
+      return next;
+    });
+  }, [debouncedSet]);
+
+  // Delete habit
+  const deleteHabit = useCallback(async (habitId) => {
+    setHabits(prev => {
+      const next = prev.filter(h => h.id !== habitId);
+      debouncedSet('habits', next, 200);
+      return next;
+    });
+  }, [debouncedSet]);
+
+  // Update settings
+  const updateSettings = useCallback(async (partial) => {
+    setSettings(prev => {
+      const next = {...prev, ...partial};
+      debouncedSet('settings', next, 200);
+      return next;
+    });
+  }, [debouncedSet]);
+
+  // Save mood
+  const saveMood = useCallback(async (moodData) => {
+    const today = getToday();
+    const mk = getMonthKey(today);
+
+    setAllMoods(prev => {
+      const next = {...prev};
+      if (!next[mk]) next[mk] = {};
+      next[mk] = {...next[mk], [today]: moodData};
+      debouncedSet(`mood:${mk}`, next[mk]);
+      return next;
+    });
+
+    setShowMoodModal(false);
+    showToast('Mood saved!', '😊');
+  }, [debouncedSet, showToast]);
+
+  // Onboarding complete
+  const onOnboardingComplete = useCallback(async (starterHabits) => {
+    await Storage.set('onboarding', {completed:true});
+    await Storage.set('habits', starterHabits);
+    await Storage.set('gamification', {xp:0,level:1,badges:[],challenges:{}});
+    await Storage.set('settings', {moodEnabled:true,weekStart:'Monday'});
+    setHabits(starterHabits);
+    setShowOnboarding(false);
+    setLoading(false);
+    showToast('Welcome to HabitFlow! 🌊', '🎉');
+  }, [showToast]);
+
+  // Context value
+  const contextValue = useMemo(() => ({
+    habits, todayCompletions, allCompletions, allMoods, streaks, gamification, settings,
+    completeHabit, skipHabit, setQtyValue, saveHabit, deleteHabit, updateSettings,
+    showToast, triggerConfetti, loadAllData
+  }), [habits, todayCompletions, allCompletions, allMoods, streaks, gamification, settings,
+    completeHabit, skipHabit, setQtyValue, saveHabit, deleteHabit, updateSettings,
+    showToast, triggerConfetti, loadAllData]);
+
+  // Loading screen
+  if (loading) {
+    return (
+      <div className="app-container" style={{display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{textAlign:'center'}}>
+          <div style={{fontSize:'48px',marginBottom:16,animation:'bounce 1.5s infinite'}}>🌊</div>
+          <div className="spinner" style={{margin:'0 auto'}} />
+        </div>
+      </div>
+    );
+  }
+
+  // Onboarding
+  if (showOnboarding) {
+    return <Onboarding onComplete={onOnboardingComplete} />;
+  }
+
+  const tabs = [
+    {id:'today', label:'Today', icon:'☀️'},
+    {id:'calendar', label:'Calendar', icon:'📅'},
+    {id:'stats', label:'Stats', icon:'📊'},
+    {id:'settings', label:'Settings', icon:'⚙️'}
+  ];
+
+  return (
+    <AppContext.Provider value={contextValue}>
+      <div className="app-container">
+        {/* Tab Content */}
+        <div className="tab-content">
+          {activeTab === 'today' && <TodayTab />}
+          {activeTab === 'calendar' && <CalendarTab />}
+          {activeTab === 'stats' && <StatsTab />}
+          {activeTab === 'settings' && <SettingsTab />}
+        </div>
+
+        {/* FAB */}
+        {activeTab === 'today' && (
+          <button className="fab" onClick={() => setShowAddHabit(true)}>+</button>
+        )}
+
+        {/* Tab Bar */}
+        <div className="tab-bar">
+          {tabs.map(tab => (
+            <button key={tab.id} className={`tab-btn ${activeTab===tab.id?'active':''}`}
+              onClick={() => setActiveTab(tab.id)}>
+              <span className="tab-icon">{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Toasts */}
+        <ToastContainer toasts={toasts} removeToast={removeToast} />
+
+        {/* Confetti */}
+        <Confetti active={showConfetti} onDone={() => setShowConfetti(false)} />
+
+        {/* Mood Modal */}
+        {showMoodModal && (
+          <MoodModal onSave={saveMood} onClose={() => setShowMoodModal(false)} />
+        )}
+
+        {/* Add Habit Modal */}
+        {showAddHabit && (
+          <HabitModal onSave={async (data) => { await saveHabit(data); setShowAddHabit(false); showToast('Habit created!','✅'); }}
+            onClose={() => setShowAddHabit(false)} />
+        )}
+      </div>
+    </AppContext.Provider>
+  );
+}
+
+/* =================================================================
+   MOUNT APP
+   ================================================================= */
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(React.createElement(App));
+
+/* =================================================================
+   SERVICE WORKER REGISTRATION
+   ================================================================= */
+
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('./sw.js').catch(console.error);
+}
+</script>
+</body>
+</html>
